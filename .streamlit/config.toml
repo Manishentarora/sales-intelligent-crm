@@ -1,0 +1,52 @@
+[theme]
+   primaryColor = "#667eea"
+   backgroundColor = "#ffffff"
+   secondaryBackgroundColor = "#f0f2f6"
+   textColor = "#262730"
+   font = "sans serif"
+   
+   [server]
+   headless = true
+   port = 8501
+   enableCORS = false
+   enableXsrfProtection = true
+   
+   [browser]
+   gatherUsageStats = false
+   
+   [client]
+   showSidebarNavigation = false
+   toolbarMode = "minimal"
+   
+   [pwa]
+   enabled = true
+   name = "Sales Intelligence Pro"
+   shortName = "Sales Intel"
+   description = "Complete sales analytics platform"
+   display = "standalone"
+   backgroundColor = "#ffffff"
+   themeColor = "#667eea"
+```
+
+5. **Click "Commit new file"**
+
+6. **Done! ✅**
+
+---
+
+## 💡 THE MAGIC
+
+When you type: `.streamlit/config.toml`
+
+GitHub sees the slash `/` and:
+- Creates folder: `.streamlit/`
+- Creates file: `config.toml` inside it
+
+**One action = folder + file created!**
+
+---
+
+## ✅ WHAT YOU GET
+```
+.streamlit/          ← Folder created
+└── config.toml     ← File inside it
