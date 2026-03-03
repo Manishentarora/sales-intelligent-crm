@@ -1,0 +1,37 @@
+# CORE DEPENDENCIES (Required)
+streamlit>=1.32.0
+pandas>=2.0.0
+plotly>=5.18.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+xlsxwriter>=3.1.0
+scipy>=1.11.0
+cryptography>=41.0.0
+
+# FREE CHATBOT (Choose one or both)
+# Option 1: Google Gemini (free cloud API)
+# Get key: https://makersuite.google.com/app/apikey
+# Free tier: 15 req/min, 1,500/day
+requests>=2.31.0
+
+# Option 2: Ollama (100% free, offline)
+# Install: https://ollama.ai
+# No Python package needed - uses HTTP API
+
+# FREE OCR (Required for invoice reading)
+pytesseract>=0.3.10
+Pillow>=10.0.0
+pdf2image>=1.16.0
+
+# NOTES:
+# 
+# For Tesseract (OCR):
+# - Ubuntu: sudo apt-get install tesseract-ocr
+# - macOS: brew install tesseract
+# - Windows: https://github.com/UB-Mannheim/tesseract/wiki
+#
+# For Ollama (Chatbot):
+# - All platforms: https://ollama.ai
+# - After install: ollama pull llama2
+#
+# Total cost: $0 forever
