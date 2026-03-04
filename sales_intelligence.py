@@ -285,11 +285,33 @@ def load_data(files):
     
     for name, content in files:
         try:
-            # Read file
+            # Read file with header detection
             if name.endswith('.csv'):
                 df = pd.read_csv(io.BytesIO(content))
             else:
-                df = pd.read_excel(io.BytesIO(content))
+                # Excel file - detect header row
+                file_bytes = io.BytesIO(content)
+                
+                # First, scan first 20 rows to find headers
+                df_test = pd.read_excel(file_bytes, header=None, nrows=20)
+                
+                # Find the header row (look for row with "Date", "Amount", "Particulars", etc.)
+                header_row = 0
+                for idx, row in df_test.iterrows():
+                    row_str = ' '.join([str(x).lower() for x in row if pd.notna(x)])
+                    # Look for key column indicators
+                    if any(word in row_str for word in ['date', 'amount', 'particulars', 'customer', 
+                                                         'invoice', 'bill', 'vch', 'voucher', 'party']):
+                        header_row = int(idx)
+                        break
+                
+                # Re-read with correct header
+                file_bytes.seek(0)
+                if header_row > 0:
+                    df = pd.read_excel(file_bytes, header=header_row)
+                    st.sidebar.info(f"📋 Skipped {header_row} header row(s)")
+                else:
+                    df = pd.read_excel(file_bytes)
             
             # Auto-detect and rename common column patterns
             rename_map = {}
