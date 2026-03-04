@@ -38,8 +38,8 @@ except ImportError:
 st.set_page_config(page_title="Sales Intelligence Pro", page_icon="📊", layout="wide")
 
 # ── License enforcement — app stops here if invalid ────────
-if False:  # Disabled for cloud
-       LicenseGuard.enforce()
+if LICENSE_ENABLED:
+    LicenseGuard.enforce()
 
 # ── Professional CSS ────────────────────────────────────────
 st.markdown("""
@@ -721,6 +721,15 @@ saved_files = get_saved_files()
 
 if saved_files:
     st.sidebar.success(f"✅ {len(saved_files)} file(s) saved")
+    
+    # Add delete all button
+    if st.sidebar.button("🗑️ Delete All Saved Files", type="secondary"):
+        import shutil
+        if SAVE_DIR.exists():
+            shutil.rmtree(SAVE_DIR)
+            SAVE_DIR.mkdir(parents=True, exist_ok=True)
+            st.sidebar.success("✅ All saved files deleted!")
+            st.rerun()
     
     # Create dropdown with saved files + upload option
     file_choices = ["📤 Upload new file..."] + [f.name for f in saved_files]
