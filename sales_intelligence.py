@@ -38,8 +38,8 @@ except ImportError:
 st.set_page_config(page_title="Sales Intelligence Pro", page_icon="📊", layout="wide")
 
 # ── License enforcement — app stops here if invalid ────────
-if False:  # Disabled for cloud
-       LicenseGuard.enforce()
+if LICENSE_ENABLED:
+    LicenseGuard.enforce()
 
 # ── Professional CSS ────────────────────────────────────────
 st.markdown("""
@@ -68,13 +68,44 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════
-# DATA PERSISTENCE - Files saved on client's computer
+# DATA PERSISTENCE - Files saved in Documents folder for easy access
 # ════════════════════════════════════════════════════════════
 
-DATA_DIR = Path.home() / "SalesIntelligence" / "MyData"
+# Use Documents folder so customers can easily find their saved files
+import os
+DOCUMENTS = Path.home() / "Documents"
+DATA_DIR = DOCUMENTS / "SalesIntelligence"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-UPLOADS_DIR = DATA_DIR / "uploaded_files"
+UPLOADS_DIR = DATA_DIR / "SavedFiles"
 UPLOADS_DIR.mkdir(exist_ok=True)
+
+# Create a README in the folder to help customers
+README_PATH = DATA_DIR / "README.txt"
+if not README_PATH.exists():
+    with open(README_PATH, 'w') as f:
+        f.write("""Sales Intelligence Pro - Saved Files
+==========================================
+
+This folder contains your uploaded sales data files.
+
+Location: Documents/SalesIntelligence/SavedFiles/
+
+What's saved here:
+- Your uploaded Excel/CSV files
+- Automatically saved when you upload
+- Loaded instantly on next use
+
+Privacy:
+✅ Files stored only on YOUR computer
+❌ Never uploaded to cloud
+🔒 100% private and secure
+
+To find this folder:
+Windows: Documents\\SalesIntelligence
+Mac: Documents/SalesIntelligence
+
+Questions? Check the app's help section.
+""")
 
 def save_uploaded_file(uploaded_file):
     """Save uploaded file permanently"""
@@ -691,12 +722,31 @@ def territory_analysis(df):
 st.sidebar.title("📊 Sales Intelligence Pro")
 
 # Data storage information
-with st.sidebar.expander("💾 Data Storage", expanded=False):
-    st.caption("**Your files are saved at:**")
-    st.code(str(DATA_DIR))
+with st.sidebar.expander("💾 Your Saved Files", expanded=False):
+    st.caption("**Files saved at:**")
+    st.code(f"Documents/SalesIntelligence/SavedFiles")
+    st.caption(f"Full path: {str(UPLOADS_DIR)}")
+    st.caption("")
+    st.caption("✅ Easy to find in Documents folder")
     st.caption("✅ Saved on YOUR computer")
     st.caption("❌ Never uploaded to cloud")
     st.caption("🔒 100% private and secure")
+    
+    # Open folder button
+    if st.button("📁 Open Saved Files Folder"):
+        import subprocess
+        import platform
+        system = platform.system()
+        try:
+            if system == "Windows":
+                os.startfile(UPLOADS_DIR)
+            elif system == "Darwin":  # macOS
+                subprocess.run(["open", str(UPLOADS_DIR)])
+            else:  # Linux
+                subprocess.run(["xdg-open", str(UPLOADS_DIR)])
+            st.success("✅ Folder opened!")
+        except Exception as e:
+            st.info(f"📂 Manually navigate to: {UPLOADS_DIR}")
     
     # Backup functionality
     if st.button("📥 Backup All Data"):
@@ -722,14 +772,34 @@ saved_files = get_saved_files()
 if saved_files:
     st.sidebar.success(f"✅ {len(saved_files)} file(s) saved")
     
-    # Add delete all button
-    if st.sidebar.button("🗑️ Delete All Saved Files", type="secondary"):
-        import shutil
-        if SAVE_DIR.exists():
-            shutil.rmtree(SAVE_DIR)
-            SAVE_DIR.mkdir(parents=True, exist_ok=True)
-            st.sidebar.success("✅ All saved files deleted!")
-            st.rerun()
+    # Show saved files list
+    with st.sidebar.expander("📋 Saved Files", expanded=False):
+        for f in saved_files:
+            st.caption(f"• {f.name}")
+    
+    # Delete all button with confirmation
+    col1, col2 = st.sidebar.columns([3, 2])
+    with col1:
+        if st.button("🗑️ Delete All Saved", type="secondary", use_container_width=True):
+            st.session_state.confirm_delete = True
+    
+    # Show confirmation if button clicked
+    if st.session_state.get('confirm_delete', False):
+        st.sidebar.warning("⚠️ Delete all saved files?")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("✅ Yes, Delete", type="primary", use_container_width=True):
+                import shutil
+                if UPLOADS_DIR.exists():
+                    shutil.rmtree(UPLOADS_DIR)
+                    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+                    st.session_state.confirm_delete = False
+                    st.sidebar.success("✅ All files deleted!")
+                    st.rerun()
+        with col2:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state.confirm_delete = False
+                st.rerun()
     
     # Create dropdown with saved files + upload option
     file_choices = ["📤 Upload new file..."] + [f.name for f in saved_files]
