@@ -38,8 +38,8 @@ except ImportError:
 st.set_page_config(page_title="Sales Intelligence Pro", page_icon="📊", layout="wide")
 
 # ── License enforcement — app stops here if invalid ────────
-if LICENSE_ENABLED:
-    LicenseGuard.enforce()
+if False:  # Disabled for cloud
+       LicenseGuard.enforce()
 
 # ── Professional CSS ────────────────────────────────────────
 st.markdown("""
