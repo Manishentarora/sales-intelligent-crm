@@ -346,7 +346,27 @@ def render_data_mapper():
                     if file.name.endswith('.csv'):
                         df_raw = pd.read_csv(io.BytesIO(file.read()))
                     else:
-                        df_raw = pd.read_excel(io.BytesIO(file.read()))
+                        # Try to read Excel, auto-detect header row
+                        file_bytes = io.BytesIO(file.read())
+                        
+                        # First, try reading without specifying header
+                        df_test = pd.read_excel(file_bytes, header=None, nrows=20)
+                        
+                        # Find the header row (look for row with "Date", "Amount", etc.)
+                        header_row = 0
+                        for idx, row in df_test.iterrows():
+                            row_str = ' '.join([str(x).lower() for x in row if pd.notna(x)])
+                            if any(word in row_str for word in ['date', 'amount', 'particulars', 'customer', 'invoice', 'bill']):
+                                header_row = idx
+                                break
+                        
+                        # Re-read with correct header
+                        file_bytes.seek(0)
+                        if header_row > 0:
+                            df_raw = pd.read_excel(file_bytes, header=header_row)
+                            st.info(f"📋 Skipped {header_row} header row(s) in {file.name}")
+                        else:
+                            df_raw = pd.read_excel(file_bytes)
                     
                     # Auto-detect mapping
                     mapping = mapper.auto_detect(df_raw)
@@ -425,4 +445,3 @@ def render_data_mapper():
                 return combined
     
     return None
-
