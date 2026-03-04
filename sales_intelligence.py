@@ -26,20 +26,21 @@ from scipy.stats import chi2_contingency, ttest_ind, pearsonr
 from pathlib import Path
 import shutil
 
-# ── License: import from license_system.py in same folder ──
+# ── License: Cloud-compatible license check ──
 try:
-    from license_system import LicenseGuard
+    from simple_license_check import show_license_screen
     LICENSE_ENABLED = True
 except ImportError:
     LICENSE_ENABLED = False
-    st.warning("⚠️ License system not found - running in demo mode")
+    st.warning("⚠️ License module not found - running in open mode")
 
 # ── Page config MUST be first Streamlit call ───────────────
 st.set_page_config(page_title="Sales Intelligence Pro", page_icon="📊", layout="wide")
 
 # ── License enforcement — app stops here if invalid ────────
 if LICENSE_ENABLED:
-    LicenseGuard.enforce()
+    if not show_license_screen():
+        st.stop()
 
 # ── Professional CSS ────────────────────────────────────────
 st.markdown("""
@@ -720,6 +721,20 @@ def territory_analysis(df):
 # ════════════════════════════════════════════════════════════
 
 st.sidebar.title("📊 Sales Intelligence Pro")
+
+# Show license info if active
+if LICENSE_ENABLED and st.session_state.get('license_valid'):
+    with st.sidebar.expander("🔑 License Info", expanded=False):
+        st.caption(f"**Status:** ✅ Active")
+        if 'license_message' in st.session_state:
+            st.caption(f"**Plan:** {st.session_state.license_message}")
+        if 'license_key' in st.session_state:
+            key_display = st.session_state.license_key[:20] + "..."
+            st.caption(f"**Key:** {key_display}")
+        st.caption("")
+        if st.button("🔓 Change License"):
+            st.session_state.license_valid = False
+            st.rerun()
 
 # Data storage information
 with st.sidebar.expander("💾 Your Saved Files", expanded=False):
