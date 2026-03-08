@@ -37,9 +37,16 @@ except ImportError:
 # ── Page config MUST be first Streamlit call ───────────────
 st.set_page_config(page_title="Sales Intelligence Pro", page_icon="📊", layout="wide")
 
+# Initialize session state for license persistence
+if 'license_checked' not in st.session_state:
+    st.session_state.license_checked = False
+
 # ── License enforcement — app stops here if invalid ────────
-if LICENSE_ENABLED:
-    if not show_license_screen():
+if LICENSE_ENABLED and not st.session_state.license_checked:
+    if show_license_screen():
+        st.session_state.license_checked = True
+        st.rerun()
+    else:
         st.stop()
 
 # ── Professional CSS ────────────────────────────────────────
@@ -292,34 +299,40 @@ def load_data(files):
                 # Excel file - detect header row
                 file_bytes = io.BytesIO(content)
                 
-                # First, scan first 20 rows to find headers
-                df_test = pd.read_excel(file_bytes, header=None, nrows=20)
+                # First, scan first 25 rows to find headers (read with NO header)
+                df_test = pd.read_excel(file_bytes, header=None, nrows=25)
                 
                 # Find the header row (look for row with "Date", "Amount", "Particulars", etc.)
                 header_row = 0
                 for idx, row in df_test.iterrows():
-                    row_str = ' '.join([str(x).lower() for x in row if pd.notna(x)])
+                    # Convert row to lowercase string for checking
+                    row_str = ' '.join([str(x).lower().strip() for x in row if pd.notna(x) and str(x).strip() != ''])
                     # Look for key column indicators
-                    if any(word in row_str for word in ['date', 'amount', 'particulars', 'customer', 
-                                                         'invoice', 'bill', 'vch', 'voucher', 'party']):
-                        header_row = int(idx)
-                        break
+                    if any(word in row_str for word in ['date', 'vch', 'particulars', 'amount']):
+                        # Make sure it has multiple keywords (not just one)
+                        keyword_count = sum(1 for word in ['date', 'vch', 'bill', 'particulars', 'amount', 'customer'] if word in row_str)
+                        if keyword_count >= 2:  # Must have at least 2 keywords to be header
+                            header_row = int(idx)
+                            break
                 
                 # Re-read with correct header
                 file_bytes.seek(0)
+                df = pd.read_excel(file_bytes, header=header_row)
+                
                 if header_row > 0:
-                    df = pd.read_excel(file_bytes, header=header_row)
                     st.sidebar.info(f"📋 Skipped {header_row} header row(s)")
-                else:
-                    df = pd.read_excel(file_bytes)
                 
                 # Fix duplicate column names (common in Excel exports)
-                cols = pd.Series(df.columns)
-                for dup in cols[cols.duplicated()].unique():
-                    # Rename duplicates by adding suffix
-                    cols[cols[cols == dup].index.values.tolist()] = [dup + '_' + str(i) if i != 0 else dup 
-                                                                       for i in range(sum(cols == dup))]
-                df.columns = cols
+                if df.columns.duplicated().any():
+                    cols = pd.Series(df.columns)
+                    for dup in cols[cols.duplicated()].unique():
+                        # Rename duplicates by adding suffix  
+                        dup_indices = cols[cols == dup].index.tolist()
+                        for i, idx in enumerate(dup_indices):
+                            if i > 0:  # Keep first occurrence, rename others
+                                cols[idx] = f"{dup}_{i}"
+                    df.columns = cols
+                    st.sidebar.warning(f"⚠️ Fixed {sum(df.columns.duplicated())} duplicate column(s)")
             
             # Auto-detect and rename common column patterns
             rename_map = {}
@@ -843,34 +856,55 @@ saved_files = get_saved_files()
 if saved_files:
     st.sidebar.success(f"✅ {len(saved_files)} file(s) saved")
     
-    # Show saved files list
-    with st.sidebar.expander("📋 Saved Files", expanded=False):
+    # Show folder location button
+    if st.sidebar.button("📁 Open Saved Files Folder", use_container_width=True):
+        import subprocess
+        import platform
+        system = platform.system()
+        try:
+            if system == "Windows":
+                os.startfile(UPLOADS_DIR)
+            elif system == "Darwin":  # macOS
+                subprocess.run(["open", str(UPLOADS_DIR)])
+            else:  # Linux
+                subprocess.run(["xdg-open", str(UPLOADS_DIR)])
+            st.sidebar.success(f"✅ Opening: {UPLOADS_DIR}")
+        except Exception as e:
+            st.sidebar.info(f"📂 Folder: {UPLOADS_DIR}")
+    
+    # File management section
+    with st.sidebar.expander("🗑️ Manage Saved Files", expanded=False):
+        st.caption("**Select files to delete:**")
+        
+        # Create checkboxes for each file
+        files_to_delete = []
+        select_all = st.checkbox("Select All", key="select_all_files")
+        
         for f in saved_files:
-            st.caption(f"• {f.name}")
-    
-    # Delete all button with confirmation
-    col1, col2 = st.sidebar.columns([3, 2])
-    with col1:
-        if st.button("🗑️ Delete All Saved", type="secondary", use_container_width=True):
-            st.session_state.confirm_delete = True
-    
-    # Show confirmation if button clicked
-    if st.session_state.get('confirm_delete', False):
-        st.sidebar.warning("⚠️ Delete all saved files?")
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            if st.button("✅ Yes, Delete", type="primary", use_container_width=True):
-                import shutil
-                if UPLOADS_DIR.exists():
-                    shutil.rmtree(UPLOADS_DIR)
-                    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-                    st.session_state.confirm_delete = False
-                    st.sidebar.success("✅ All files deleted!")
+            if select_all:
+                if st.checkbox(f.name, value=True, key=f"del_{f.name}"):
+                    files_to_delete.append(f)
+            else:
+                if st.checkbox(f.name, value=False, key=f"del_{f.name}"):
+                    files_to_delete.append(f)
+        
+        if files_to_delete:
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"🗑️ Delete ({len(files_to_delete)})", type="primary", use_container_width=True):
+                    for f in files_to_delete:
+                        try:
+                            f.unlink()
+                        except Exception as e:
+                            st.error(f"Error deleting {f.name}: {e}")
+                    # Clear session state to force reload
+                    st.session_state.df = None
+                    st.session_state.ref_date = None
+                    st.success(f"✅ Deleted {len(files_to_delete)} file(s)")
                     st.rerun()
-        with col2:
-            if st.button("❌ Cancel", use_container_width=True):
-                st.session_state.confirm_delete = False
-                st.rerun()
+            with col2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.rerun()
     
     # Create dropdown with saved files + upload option
     file_choices = ["📤 Upload new file..."] + [f.name for f in saved_files]
@@ -907,10 +941,15 @@ else:
     )
 
 # Main data loading
-df = None
-ref_date = None
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'ref_date' not in st.session_state:
+    st.session_state.ref_date = None
 
-if not uploaded_files:
+df = st.session_state.df
+ref_date = st.session_state.ref_date
+
+if not uploaded_files and df is None:
     st.title("🎯 Sales Intelligence Pro")
     st.markdown("""
     ### Complete Analytics Platform
@@ -931,72 +970,83 @@ if not uploaded_files:
     st.stop()
 
 # Handle file loading
-try:
-    # Save new uploads and load data
-    if isinstance(uploaded_files, list) and len(uploaded_files) > 0:
-        # From uploader - need to save and read
-        if isinstance(uploaded_files[0], tuple):
-            # Already processed (from saved file)
-            files_to_load = uploaded_files
-        else:
-            # Fresh uploads - save them first
-            files_to_load = []
-            for uploaded_file in uploaded_files:
-                save_uploaded_file(uploaded_file)
-                st.sidebar.success(f"💾 Saved: {uploaded_file.name}")
-                uploaded_file.seek(0)
-                files_to_load.append((uploaded_file.name, uploaded_file.read()))
+if uploaded_files:
+    try:
+        # Save new uploads and load data
+        if isinstance(uploaded_files, list) and len(uploaded_files) > 0:
+            # From uploader - need to save and read
+            if isinstance(uploaded_files[0], tuple):
+                # Already processed (from saved file)
+                files_to_load = uploaded_files
+            else:
+                # Fresh uploads - save them first
+                files_to_load = []
+                for uploaded_file in uploaded_files:
+                    save_uploaded_file(uploaded_file)
+                    st.sidebar.success(f"💾 Saved: {uploaded_file.name}")
+                    uploaded_file.seek(0)
+                    files_to_load.append((uploaded_file.name, uploaded_file.read()))
+            
+            df = load_data(files_to_load)
+            ref_date = df['Date'].max()
+            
+            # Save to session state
+            st.session_state.df = df
+            st.session_state.ref_date = ref_date
         
-        df = load_data(files_to_load)
-        ref_date = df['Date'].max()
-    
-    # Show data summary in sidebar
+        # Show data summary in sidebar
+        st.sidebar.success(f"✅ {len(df):,} unique transactions")
+        st.sidebar.caption(f"📅 {df['Date'].min().strftime('%b %Y')} – {df['Date'].max().strftime('%b %Y')}")
+        
+        # Check for missing optional features
+        missing_features = []
+        if df['Item Details'].iloc[0] == 'Not Specified':
+            missing_features.extend([
+                "Market Basket Analysis",
+                "Product ABC Analysis", 
+                "Product Price Variance"
+            ])
+        if df['Salesperson'].iloc[0] == 'Not Specified':
+            missing_features.extend([
+                "Salesperson Dashboard",
+                "Rep Comparison",
+                "Territory Analysis"
+            ])
+        
+        if missing_features:
+            with st.sidebar.expander("⚠️ Limited Features", expanded=False):
+                st.caption("**Some features unavailable due to missing columns:**")
+                for feature in missing_features:
+                    st.caption(f"❌ {feature}")
+                st.caption("")
+                st.caption("**To enable all features, include:**")
+                if df['Item Details'].iloc[0] == 'Not Specified':
+                    st.caption("- Item Details (for product analysis)")
+                if df['Salesperson'].iloc[0] == 'Not Specified':
+                    st.caption("- Salesperson (for sales team analysis)")
+                st.caption("")
+                st.caption("**All customer-based analytics work normally!**")
+        
+    except Exception as e:
+        st.error(f"""
+        ❌ **Error loading data**
+        
+        {str(e)}
+        
+        **Common issues:**
+        - Missing required columns (Date, Customer, Amount)
+        - Invalid date format
+        - Non-numeric amounts
+        
+        **Need help?** Check the file format requirements above.
+        """)
+        st.session_state.df = None
+        st.session_state.ref_date = None
+        st.stop()
+elif df is not None:
+    # Data already loaded in session - show summary
     st.sidebar.success(f"✅ {len(df):,} unique transactions")
     st.sidebar.caption(f"📅 {df['Date'].min().strftime('%b %Y')} – {df['Date'].max().strftime('%b %Y')}")
-    
-    # Check for missing optional features
-    missing_features = []
-    if df['Item Details'].iloc[0] == 'Not Specified':
-        missing_features.extend([
-            "Market Basket Analysis",
-            "Product ABC Analysis", 
-            "Product Price Variance"
-        ])
-    if df['Salesperson'].iloc[0] == 'Not Specified':
-        missing_features.extend([
-            "Salesperson Dashboard",
-            "Rep Comparison",
-            "Territory Analysis"
-        ])
-    
-    if missing_features:
-        with st.sidebar.expander("⚠️ Limited Features", expanded=False):
-            st.caption("**Some features unavailable due to missing columns:**")
-            for feature in missing_features:
-                st.caption(f"❌ {feature}")
-            st.caption("")
-            st.caption("**To enable all features, include:**")
-            if df['Item Details'].iloc[0] == 'Not Specified':
-                st.caption("- Item Details (for product analysis)")
-            if df['Salesperson'].iloc[0] == 'Not Specified':
-                st.caption("- Salesperson (for sales team analysis)")
-            st.caption("")
-            st.caption("**All customer-based analytics work normally!**")
-    
-except Exception as e:
-    st.error(f"""
-    ❌ **Error loading data**
-    
-    {str(e)}
-    
-    **Common issues:**
-    - Missing required columns (Date, Customer, Amount)
-    - Invalid date format
-    - Non-numeric amounts
-    
-    **Need help?** Check the file format requirements above.
-    """)
-    st.stop()
 
 # ════════════════════════════════════════════════════════════
 # NAVIGATION
