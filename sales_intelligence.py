@@ -393,19 +393,24 @@ def load_data(files):
             # CRITICAL FIX: Handle multi-line invoices (blank dates but valid amounts)
             # Fill forward Date, Invoice No, and Customer for multi-line items
             if 'Date' in df.columns:
-                df['Date'] = df['Date'].fillna(method='ffill')
+                df['Date'] = df['Date'].ffill()
             if 'Vch/Bill No' in df.columns:
-                df['Vch/Bill No'] = df['Vch/Bill No'].fillna(method='ffill')
+                df['Vch/Bill No'] = df['Vch/Bill No'].ffill()
             if 'Particulars' in df.columns:
-                df['Particulars'] = df['Particulars'].fillna(method='ffill')
+                df['Particulars'] = df['Particulars'].ffill()
             
-            # Drop rows that still have no date after forward fill (completely blank rows)
-            if 'Date' in df.columns:
-                rows_before = len(df)
-                df = df[df['Date'].notna()].copy()
-                rows_after = len(df)
-                if rows_before > rows_after:
-                    st.sidebar.info(f"📋 Processed {rows_before - rows_after} continuation rows")
+            # Remove rows with null Amount (completely blank rows)
+            rows_before = len(df)
+            df = df[df['Amount'].notna()].copy()
+            rows_after = len(df)
+            
+            if rows_before > rows_after:
+                st.sidebar.info(f"📋 Removed {rows_before - rows_after} blank rows")
+            
+            # Show multi-line invoice info
+            multi_line_count = rows_after - df[df['Date'].notna()].shape[0] if 'Date' in df.columns else 0
+            if multi_line_count > 0:
+                st.sidebar.success(f"✅ Processed {multi_line_count} multi-line invoice items")
             
             all_dfs.append(df)
             files_loaded.append(name)
@@ -1126,37 +1131,51 @@ if view == "Dashboard":
     st.plotly_chart(fig1, use_container_width=True)
     
     # Scrollable Top 100 Customers Ticker
-    st.markdown("### 📜 Top 100 Customers - Scrollable List")
+    st.markdown("### 📜 Top 100 Customers - Scrollable View")
+    
     top100_customers = df.groupby('Particulars')['Amount'].sum().nlargest(100).reset_index()
     top100_customers.columns = ['Customer', 'Revenue']
     top100_customers['Rank'] = range(1, len(top100_customers) + 1)
-    top100_customers['Revenue_Formatted'] = top100_customers['Revenue'].apply(lambda x: f'₹{x:,.0f}')
     
-    # Create scrollable ticker HTML
-    ticker_html = '<div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; margin: 10px 0;">'
-    ticker_html += '<div style="overflow-x: auto; white-space: nowrap; padding: 10px 0;">'
-    ticker_html += '<div style="display: inline-flex; gap: 20px; animation: scroll 120s linear infinite;">'
-    
-    for idx, row in top100_customers.iterrows():
-        ticker_html += f'''
-        <div style="display: inline-block; background: white; padding: 8px 15px; border-radius: 8px; min-width: 250px;">
-            <span style="font-weight: bold; color: #667eea;">#{row['Rank']}</span>
-            <span style="margin: 0 10px; color: #333;">{row['Customer'][:30]}...</span>
-            <span style="font-weight: bold; color: #28a745;">{row['Revenue_Formatted']}</span>
-        </div>
-        '''
-    
-    ticker_html += '</div></div></div>'
-    ticker_html += '''
+    # Create scrollable container with horizontal scroll
+    st.markdown("""
     <style>
-    @keyframes scroll {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
+    .ticker-container {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+        border-radius: 12px;
+        overflow-x: auto;
+        white-space: nowrap;
+        margin: 20px 0;
     }
+    .ticker-item {
+        display: inline-block;
+        background: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        margin-right: 15px;
+        min-width: 280px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .rank { font-weight: bold; color: #667eea; font-size: 1.1em; }
+    .customer-name { margin: 0 12px; color: #333; }
+    .revenue { font-weight: bold; color: #28a745; font-size: 1.1em; }
     </style>
-    '''
+    <div class="ticker-container">
+    """, unsafe_allow_html=True)
     
-    st.markdown(ticker_html, unsafe_allow_html=True)
+    # Build ticker items
+    ticker_items = ""
+    for idx, row in top100_customers.iterrows():
+        customer_short = row['Customer'][:35] + "..." if len(row['Customer']) > 35 else row['Customer']
+        revenue_fmt = f"₹{row['Revenue']:,.0f}"
+        ticker_items += f'''<span class="ticker-item">
+            <span class="rank">#{row['Rank']}</span>
+            <span class="customer-name">{customer_short}</span>
+            <span class="revenue">{revenue_fmt}</span>
+        </span>'''
+    
+    st.markdown(ticker_items + "</div>", unsafe_allow_html=True)
     
     # Revenue Trend
     col1, col2 = st.columns(2)
