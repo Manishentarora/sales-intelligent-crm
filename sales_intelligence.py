@@ -350,6 +350,17 @@ def load_data(files):
             
             if rename_map:
                 df = df.rename(columns=rename_map)
+                # Show what was detected
+                st.sidebar.success(f"✅ Columns detected: {', '.join(rename_map.values())}")
+            else:
+                # No columns were renamed - show original columns for debugging
+                st.sidebar.warning(f"⚠️ Using original columns: {', '.join([str(c) for c in df.columns[:5]])}")
+            
+            # Show DataFrame info for debugging
+            with st.expander(f"🔍 File Preview: {name}", expanded=False):
+                st.caption(f"**Columns found:** {list(df.columns)}")
+                st.caption(f"**Rows:** {len(df)}")
+                st.dataframe(df.head())
             
             # Handle missing columns
             df = handle_missing_columns(df)
@@ -358,7 +369,18 @@ def load_data(files):
             files_loaded.append(name)
             
         except Exception as e:
-            files_skipped.append((name, str(e)))
+            error_details = f"{type(e).__name__}: {str(e)}"
+            st.error(f"❌ Error loading {name}: {error_details}")
+            files_skipped.append((name, error_details))
+            
+            # Show detailed debug info
+            with st.expander(f"🔍 Debug Info for {name}"):
+                st.code(f"Error: {error_details}")
+                st.caption("If you see this, please check:")
+                st.caption("1. File has Date, Particulars/Customer, Amount columns")
+                st.caption("2. First data row starts after company headers")
+                st.caption("3. Date column has valid dates")
+                st.caption("4. Amount column has numbers")
             continue
     
     if not all_dfs:
