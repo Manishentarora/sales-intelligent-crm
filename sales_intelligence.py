@@ -312,6 +312,14 @@ def load_data(files):
                     st.sidebar.info(f"📋 Skipped {header_row} header row(s)")
                 else:
                     df = pd.read_excel(file_bytes)
+                
+                # Fix duplicate column names (common in Excel exports)
+                cols = pd.Series(df.columns)
+                for dup in cols[cols.duplicated()].unique():
+                    # Rename duplicates by adding suffix
+                    cols[cols[cols == dup].index.values.tolist()] = [dup + '_' + str(i) if i != 0 else dup 
+                                                                       for i in range(sum(cols == dup))]
+                df.columns = cols
             
             # Auto-detect and rename common column patterns
             rename_map = {}
@@ -328,10 +336,14 @@ def load_data(files):
                     if 'Particulars' not in rename_map.values():
                         rename_map[col] = 'Particulars'
                 
-                # Amount detection
-                elif any(k in col_lower for k in ['amount', 'value', 'amt', 'total', 'price']):
+                # Amount detection (take FIRST amount column only)
+                elif any(k in col_lower for k in ['amount', 'value', 'amt', 'total']):
+                    # Skip if we already found an Amount column
                     if 'Amount' not in rename_map.values():
                         rename_map[col] = 'Amount'
+                    # If this is a duplicate amount column, skip it
+                    elif col_lower.startswith('amount'):
+                        continue
                 
                 # Product detection
                 elif any(k in col_lower for k in ['item', 'product', 'description', 'goods']):
