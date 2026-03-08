@@ -390,8 +390,8 @@ def load_data(files):
             # Handle missing columns
             df = handle_missing_columns(df)
             
-            # CRITICAL FIX: Handle multi-line invoices (blank dates but valid amounts)
-            # Fill forward Date, Invoice No, and Customer for multi-line items
+            # CRITICAL FIX: Handle multi-line invoices
+            # Fill forward Date, Invoice No, and Customer for continuation rows
             if 'Date' in df.columns:
                 df['Date'] = df['Date'].ffill()
             if 'Vch/Bill No' in df.columns:
@@ -399,19 +399,27 @@ def load_data(files):
             if 'Particulars' in df.columns:
                 df['Particulars'] = df['Particulars'].ffill()
             
-            # Remove rows with null Amount (completely blank rows)
+            # Remove completely blank rows
             rows_before = len(df)
             df = df[df['Amount'].notna()].copy()
-            rows_after = len(df)
             
-            if rows_before > rows_after:
-                st.sidebar.info(f"📋 Removed {rows_before - rows_after} blank rows")
+            # CRITICAL: Group by invoice to avoid double-counting line items
+            # Each invoice may have multiple products - we want total per invoice
+            invoice_totals = df.groupby(['Date', 'Vch/Bill No', 'Particulars']).agg({
+                'Amount': 'sum',  # Sum all line items in the invoice
+                'Item Details': 'first',  # Keep first product for reference
+                'Quantity': 'first',
+                'Category': 'first',
+                'Location': 'first',
+                'Payment Terms': 'first',
+                'Region': 'first',
+                'Discount %': 'first',
+                'Salesperson': 'first'
+            }).reset_index()
             
-            # Show multi-line invoice info
-            multi_line_count = rows_after - df[df['Date'].notna()].shape[0] if 'Date' in df.columns else 0
-            if multi_line_count > 0:
-                st.sidebar.success(f"✅ Processed {multi_line_count} multi-line invoice items")
+            st.sidebar.success(f"✅ Processed {len(df)} line items → {len(invoice_totals)} invoices")
             
+            df = invoice_totals
             all_dfs.append(df)
             files_loaded.append(name)
             
@@ -1130,52 +1138,21 @@ if view == "Dashboard":
     )
     st.plotly_chart(fig1, use_container_width=True)
     
-    # Scrollable Top 100 Customers Ticker
-    st.markdown("### 📜 Top 100 Customers - Scrollable View")
+    # Top 100 Customers - Clean Table
+    st.markdown("### 📜 Top 100 Customers")
     
     top100_customers = df.groupby('Particulars')['Amount'].sum().nlargest(100).reset_index()
     top100_customers.columns = ['Customer', 'Revenue']
     top100_customers['Rank'] = range(1, len(top100_customers) + 1)
+    top100_customers['Revenue (₹)'] = top100_customers['Revenue'].apply(lambda x: f'₹{x:,.0f}')
     
-    # Create scrollable container with horizontal scroll
-    st.markdown("""
-    <style>
-    .ticker-container {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-        border-radius: 12px;
-        overflow-x: auto;
-        white-space: nowrap;
-        margin: 20px 0;
-    }
-    .ticker-item {
-        display: inline-block;
-        background: white;
-        padding: 12px 20px;
-        border-radius: 8px;
-        margin-right: 15px;
-        min-width: 280px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .rank { font-weight: bold; color: #667eea; font-size: 1.1em; }
-    .customer-name { margin: 0 12px; color: #333; }
-    .revenue { font-weight: bold; color: #28a745; font-size: 1.1em; }
-    </style>
-    <div class="ticker-container">
-    """, unsafe_allow_html=True)
-    
-    # Build ticker items
-    ticker_items = ""
-    for idx, row in top100_customers.iterrows():
-        customer_short = row['Customer'][:35] + "..." if len(row['Customer']) > 35 else row['Customer']
-        revenue_fmt = f"₹{row['Revenue']:,.0f}"
-        ticker_items += f'''<span class="ticker-item">
-            <span class="rank">#{row['Rank']}</span>
-            <span class="customer-name">{customer_short}</span>
-            <span class="revenue">{revenue_fmt}</span>
-        </span>'''
-    
-    st.markdown(ticker_items + "</div>", unsafe_allow_html=True)
+    # Display as scrollable dataframe
+    st.dataframe(
+        top100_customers[['Rank', 'Customer', 'Revenue (₹)']],
+        use_container_width=True,
+        height=400,
+        hide_index=True
+    )
     
     # Revenue Trend
     col1, col2 = st.columns(2)
@@ -1196,12 +1173,17 @@ if view == "Dashboard":
         st.plotly_chart(fig2, use_container_width=True)
     
     with col2:
-        # Monthly Sales Bar Chart
+        # Monthly Sales Bar Chart  
         st.markdown("### 📊 Monthly Sales Overview")
         df_monthly_sales = df.copy()
-        df_monthly_sales['YearMonth'] = df_monthly_sales['Date'].dt.to_period('M').astype(str)
+        df_monthly_sales['YearMonth'] = df_monthly_sales['Date'].dt.to_period('M')
         monthly_totals = df_monthly_sales.groupby('YearMonth')['Amount'].sum().reset_index()
         monthly_totals = monthly_totals.sort_values('YearMonth')
+        
+        # Format month names properly
+        monthly_totals['Month_Label'] = monthly_totals['YearMonth'].apply(
+            lambda x: x.strftime('%b %Y')  # e.g., "Apr 2025"
+        )
         
         # Calculate average
         avg_monthly = monthly_totals['Amount'].mean()
@@ -1213,7 +1195,7 @@ if view == "Dashboard":
         colors = ['green' if x >= avg_monthly else 'orange' for x in monthly_totals['Amount']]
         
         fig3.add_trace(go.Bar(
-            x=monthly_totals['YearMonth'],
+            x=monthly_totals['Month_Label'],
             y=monthly_totals['Amount'],
             marker_color=colors,
             text=monthly_totals['Amount'].apply(lambda x: f'₹{x/1e6:.1f}M' if x >= 1e6 else f'₹{x/1e3:.0f}K'),
@@ -1236,7 +1218,8 @@ if view == "Dashboard":
             xaxis_title='Month',
             yaxis_title='Sales (₹)',
             height=450,
-            showlegend=False
+            showlegend=False,
+            xaxis={'tickangle': -45}  # Angle labels for readability
         )
         st.plotly_chart(fig3, use_container_width=True)
 
