@@ -390,6 +390,23 @@ def load_data(files):
             # Handle missing columns
             df = handle_missing_columns(df)
             
+            # CRITICAL FIX: Handle multi-line invoices (blank dates but valid amounts)
+            # Fill forward Date, Invoice No, and Customer for multi-line items
+            if 'Date' in df.columns:
+                df['Date'] = df['Date'].fillna(method='ffill')
+            if 'Vch/Bill No' in df.columns:
+                df['Vch/Bill No'] = df['Vch/Bill No'].fillna(method='ffill')
+            if 'Particulars' in df.columns:
+                df['Particulars'] = df['Particulars'].fillna(method='ffill')
+            
+            # Drop rows that still have no date after forward fill (completely blank rows)
+            if 'Date' in df.columns:
+                rows_before = len(df)
+                df = df[df['Date'].notna()].copy()
+                rows_after = len(df)
+                if rows_before > rows_after:
+                    st.sidebar.info(f"📋 Processed {rows_before - rows_after} continuation rows")
+            
             all_dfs.append(df)
             files_loaded.append(name)
             
@@ -1094,7 +1111,7 @@ if view == "Dashboard":
     ]
     clean_kpi("Business Overview", metrics)
     
-    # Top 10 Customers
+    # Top 10 Customers Chart
     st.markdown("### 🏆 Top 10 Customers by Revenue")
     top10_customers = df.groupby('Particulars')['Amount'].sum().nlargest(10).reset_index()
     top10_customers.columns = ['Customer', 'Revenue']
@@ -1107,6 +1124,39 @@ if view == "Dashboard":
         title='Top 10 Customers'
     )
     st.plotly_chart(fig1, use_container_width=True)
+    
+    # Scrollable Top 100 Customers Ticker
+    st.markdown("### 📜 Top 100 Customers - Scrollable List")
+    top100_customers = df.groupby('Particulars')['Amount'].sum().nlargest(100).reset_index()
+    top100_customers.columns = ['Customer', 'Revenue']
+    top100_customers['Rank'] = range(1, len(top100_customers) + 1)
+    top100_customers['Revenue_Formatted'] = top100_customers['Revenue'].apply(lambda x: f'₹{x:,.0f}')
+    
+    # Create scrollable ticker HTML
+    ticker_html = '<div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; margin: 10px 0;">'
+    ticker_html += '<div style="overflow-x: auto; white-space: nowrap; padding: 10px 0;">'
+    ticker_html += '<div style="display: inline-flex; gap: 20px; animation: scroll 120s linear infinite;">'
+    
+    for idx, row in top100_customers.iterrows():
+        ticker_html += f'''
+        <div style="display: inline-block; background: white; padding: 8px 15px; border-radius: 8px; min-width: 250px;">
+            <span style="font-weight: bold; color: #667eea;">#{row['Rank']}</span>
+            <span style="margin: 0 10px; color: #333;">{row['Customer'][:30]}...</span>
+            <span style="font-weight: bold; color: #28a745;">{row['Revenue_Formatted']}</span>
+        </div>
+        '''
+    
+    ticker_html += '</div></div></div>'
+    ticker_html += '''
+    <style>
+    @keyframes scroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+    </style>
+    '''
+    
+    st.markdown(ticker_html, unsafe_allow_html=True)
     
     # Revenue Trend
     col1, col2 = st.columns(2)
@@ -1127,25 +1177,48 @@ if view == "Dashboard":
         st.plotly_chart(fig2, use_container_width=True)
     
     with col2:
-        st.markdown("### 📅 Monthly Revenue Heatmap")
-        df_heatmap = df.copy()
-        df_heatmap['Year_Num'] = df_heatmap['Date'].dt.year
-        df_heatmap['Month_Num'] = df_heatmap['Date'].dt.month
+        # Monthly Sales Bar Chart
+        st.markdown("### 📊 Monthly Sales Overview")
+        df_monthly_sales = df.copy()
+        df_monthly_sales['YearMonth'] = df_monthly_sales['Date'].dt.to_period('M').astype(str)
+        monthly_totals = df_monthly_sales.groupby('YearMonth')['Amount'].sum().reset_index()
+        monthly_totals = monthly_totals.sort_values('YearMonth')
         
-        heatmap_data = df_heatmap.groupby(['Year_Num', 'Month_Num'])['Amount'].sum().reset_index()
-        heatmap_pivot = heatmap_data.pivot(index='Year_Num', columns='Month_Num', values='Amount').fillna(0)
+        # Calculate average
+        avg_monthly = monthly_totals['Amount'].mean()
         
-        fig3 = go.Figure(data=go.Heatmap(
-            z=heatmap_pivot.values,
-            x=[f"M{i}" for i in heatmap_pivot.columns],
-            y=heatmap_pivot.index,
-            colorscale='Viridis',
-            text=heatmap_pivot.values,
-            texttemplate='₹%{text:.0s}',
-            textfont={"size": 10},
-            hovertemplate='Year: %{y}<br>Month: %{x}<br>Revenue: ₹%{z:,.0f}<extra></extra>'
+        # Create bar chart
+        fig3 = go.Figure()
+        
+        # Add bars with color based on average
+        colors = ['green' if x >= avg_monthly else 'orange' for x in monthly_totals['Amount']]
+        
+        fig3.add_trace(go.Bar(
+            x=monthly_totals['YearMonth'],
+            y=monthly_totals['Amount'],
+            marker_color=colors,
+            text=monthly_totals['Amount'].apply(lambda x: f'₹{x/1e6:.1f}M' if x >= 1e6 else f'₹{x/1e3:.0f}K'),
+            textposition='outside',
+            name='Monthly Sales',
+            hovertemplate='<b>%{x}</b><br>Sales: ₹%{y:,.0f}<extra></extra>'
         ))
-        fig3.update_layout(title='Monthly Revenue Heatmap', height=400)
+        
+        # Add average line
+        fig3.add_hline(
+            y=avg_monthly,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Avg: ₹{avg_monthly/1e6:.1f}M",
+            annotation_position="right"
+        )
+        
+        fig3.update_layout(
+            title='Monthly Sales Trend',
+            xaxis_title='Month',
+            yaxis_title='Sales (₹)',
+            height=450,
+            showlegend=False
+        )
         st.plotly_chart(fig3, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════
