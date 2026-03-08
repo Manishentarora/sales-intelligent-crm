@@ -1006,6 +1006,7 @@ view = st.sidebar.radio(
     "📍 Navigate to View",
     [
         "Dashboard",
+        "Customer Deep Dive",
         "Growth Lab",
         "DNA & Leakage", 
         "Lapse Tracker",
@@ -1101,6 +1102,144 @@ if view == "Dashboard":
 # VIEW 2: GROWTH LAB
 # ════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════
+# VIEW 2: CUSTOMER DEEP DIVE (NEW!)
+# ════════════════════════════════════════════════════════════
+
+elif view == "Customer Deep Dive":
+    st.title("🔍 Customer Deep Dive - Individual Customer Analysis")
+    
+    # Customer selector
+    customers = sorted(df['Particulars'].unique())
+    
+    selected_customer = st.selectbox(
+        "Select Customer to Analyze:",
+        customers,
+        help="Choose any customer to see detailed monthly patterns"
+    )
+    
+    # Filter data for selected customer
+    customer_df = df[df['Particulars'] == selected_customer].copy()
+    
+    if len(customer_df) == 0:
+        st.warning(f"No data found for {selected_customer}")
+        st.stop()
+    
+    # Summary metrics
+    st.markdown(f"### 📊 {selected_customer} - Overview")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_sales = customer_df['Amount'].sum()
+    total_transactions = len(customer_df)
+    avg_transaction = customer_df['Amount'].mean()
+    first_purchase = customer_df['Date'].min()
+    last_purchase = customer_df['Date'].max()
+    
+    col1.metric("Total Sales", f"₹{total_sales:,.0f}")
+    col2.metric("Transactions", f"{total_transactions:,}")
+    col3.metric("Avg Transaction", f"₹{avg_transaction:,.0f}")
+    col4.metric("Customer Since", first_purchase.strftime('%b %Y'))
+    
+    st.markdown("---")
+    
+    # Monthly Pattern - BAR CHART
+    st.markdown("### 📊 Monthly Purchase Pattern (Bar Chart)")
+    
+    # Prepare monthly data
+    customer_monthly = customer_df.copy()
+    customer_monthly['YearMonth'] = customer_monthly['Date'].dt.to_period('M')
+    monthly_pattern = customer_monthly.groupby('YearMonth')['Amount'].agg(['sum', 'count']).reset_index()
+    monthly_pattern['YearMonth'] = monthly_pattern['YearMonth'].astype(str)
+    monthly_pattern = monthly_pattern.sort_values('YearMonth')
+    
+    # Calculate average
+    avg_monthly_sales = monthly_pattern['sum'].mean()
+    
+    # Create bar chart
+    fig = go.Figure()
+    
+    # Add bars
+    colors = ['green' if x > avg_monthly_sales else 'orange' for x in monthly_pattern['sum']]
+    
+    fig.add_trace(go.Bar(
+        x=monthly_pattern['YearMonth'],
+        y=monthly_pattern['sum'],
+        name='Monthly Sales',
+        marker_color=colors,
+        text=monthly_pattern['sum'].apply(lambda x: f'₹{x:,.0f}'),
+        textposition='outside',
+        hovertemplate='<b>%{x}</b><br>Sales: ₹%{y:,.0f}<br>Transactions: %{customdata}<extra></extra>',
+        customdata=monthly_pattern['count']
+    ))
+    
+    # Add average line
+    fig.add_hline(
+        y=avg_monthly_sales,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Avg: ₹{avg_monthly_sales:,.0f}",
+        annotation_position="right"
+    )
+    
+    fig.update_layout(
+        title=f'{selected_customer} - Monthly Sales Pattern',
+        xaxis_title='Month',
+        yaxis_title='Sales Amount (₹)',
+        showlegend=False,
+        height=500,
+        hovermode='x unified'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Insights
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 📈 Best Months")
+        top_months = monthly_pattern.nlargest(3, 'sum')[['YearMonth', 'sum']]
+        for idx, row in top_months.iterrows():
+            st.caption(f"🟢 {row['YearMonth']}: ₹{row['sum']:,.0f}")
+    
+    with col2:
+        st.markdown("#### 📉 Weakest Months")
+        bottom_months = monthly_pattern.nsmallest(3, 'sum')[['YearMonth', 'sum']]
+        for idx, row in bottom_months.iterrows():
+            st.caption(f"🔴 {row['YearMonth']}: ₹{row['sum']:,.0f}")
+    
+    st.markdown("---")
+    
+    # Transaction Details
+    st.markdown("### 📋 Recent Transactions")
+    
+    recent_transactions = customer_df.nlargest(10, 'Date')[['Date', 'Vch/Bill No', 'Item Details', 'Amount']]
+    recent_transactions['Date'] = recent_transactions['Date'].dt.strftime('%Y-%m-%d')
+    recent_transactions['Amount'] = recent_transactions['Amount'].apply(lambda x: f'₹{x:,.0f}')
+    
+    st.dataframe(recent_transactions, use_container_width=True, hide_index=True)
+    
+    # Purchase Frequency Analysis
+    st.markdown("### 📅 Purchase Frequency")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        days_between = (customer_df['Date'].max() - customer_df['Date'].min()).days
+        if total_transactions > 1:
+            avg_days_between = days_between / (total_transactions - 1)
+            st.metric("Avg Days Between Purchases", f"{avg_days_between:.1f} days")
+        else:
+            st.metric("Avg Days Between Purchases", "N/A (Single purchase)")
+    
+    with col2:
+        days_since_last = (ref_date - customer_df['Date'].max()).days
+        st.metric("Days Since Last Purchase", f"{days_since_last} days")
+
+# ════════════════════════════════════════════════════════════
+# VIEW 3: GROWTH LAB
+# ════════════════════════════════════════════════════════════
+
 elif view == "Growth Lab":
     st.title("📈 Growth Lab - Year-over-Year Comparison")
     
@@ -1171,6 +1310,90 @@ elif view == "Growth Lab":
                 ))
                 fig.update_layout(barmode='group', title=f'Top 5 {entity_name}s Comparison')
                 st.plotly_chart(fig, use_container_width=True)
+    
+    # ═══ NEW: MONTH-OVER-MONTH COMPARISON ═══
+    st.markdown("---")
+    st.markdown("### 📊 Month-over-Month (MoM) Growth Analysis")
+    
+    # Calculate monthly totals
+    df_monthly = df.copy()
+    df_monthly['YearMonth'] = df_monthly['Date'].dt.to_period('M')
+    monthly_sales = df_monthly.groupby('YearMonth')['Amount'].sum().reset_index()
+    monthly_sales['YearMonth'] = monthly_sales['YearMonth'].astype(str)
+    monthly_sales = monthly_sales.sort_values('YearMonth')
+    
+    if len(monthly_sales) >= 2:
+        # Calculate MoM changes
+        monthly_sales['Previous_Month'] = monthly_sales['Amount'].shift(1)
+        monthly_sales['MoM_Change'] = monthly_sales['Amount'] - monthly_sales['Previous_Month']
+        monthly_sales['MoM_Pct'] = (monthly_sales['MoM_Change'] / monthly_sales['Previous_Month'] * 100).fillna(0)
+        
+        # Display MoM table
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("#### 📈 Monthly Comparison Table")
+            
+            display_mom = monthly_sales[['YearMonth', 'Amount', 'MoM_Change', 'MoM_Pct']].copy()
+            display_mom['Amount'] = display_mom['Amount'].apply(lambda x: f'₹{x:,.0f}')
+            display_mom['MoM_Change'] = display_mom['MoM_Change'].apply(
+                lambda x: f"₹{x:+,.0f}" if pd.notna(x) else "-"
+            )
+            display_mom['MoM_Pct'] = display_mom['MoM_Pct'].apply(
+                lambda x: f"{x:+.1f}%" if pd.notna(x) and x != 0 else "-"
+            )
+            display_mom.columns = ['Month', 'Sales', 'Change (₹)', 'Change (%)']
+            
+            st.dataframe(display_mom, use_container_width=True, hide_index=True)
+        
+        with col2:
+            st.markdown("#### 🎯 MoM Highlights")
+            
+            # Best month
+            best_idx = monthly_sales['MoM_Pct'].idxmax()
+            if pd.notna(best_idx):
+                best_month = monthly_sales.loc[best_idx, 'YearMonth']
+                best_pct = monthly_sales.loc[best_idx, 'MoM_Pct']
+                st.metric("Best Growth", f"{best_month}", f"+{best_pct:.1f}%", delta_color="normal")
+            
+            # Worst month
+            worst_idx = monthly_sales['MoM_Pct'].idxmin()
+            if pd.notna(worst_idx):
+                worst_month = monthly_sales.loc[worst_idx, 'YearMonth']
+                worst_pct = monthly_sales.loc[worst_idx, 'MoM_Pct']
+                st.metric("Biggest Drop", f"{worst_month}", f"{worst_pct:.1f}%", delta_color="inverse")
+            
+            # Average MoM
+            avg_mom = monthly_sales['MoM_Pct'].mean()
+            st.metric("Avg MoM Growth", f"{avg_mom:+.1f}%")
+        
+        # MoM Trend Chart
+        st.markdown("#### 📉 MoM Growth Trend")
+        
+        fig_mom = go.Figure()
+        
+        # Add bar chart for MoM percentage
+        colors = ['green' if x > 0 else 'red' for x in monthly_sales['MoM_Pct']]
+        fig_mom.add_trace(go.Bar(
+            x=monthly_sales['YearMonth'],
+            y=monthly_sales['MoM_Pct'],
+            marker_color=colors,
+            name='MoM Growth %',
+            text=monthly_sales['MoM_Pct'].apply(lambda x: f"{x:+.1f}%"),
+            textposition='outside'
+        ))
+        
+        fig_mom.update_layout(
+            title='Month-over-Month Growth Rate',
+            xaxis_title='Month',
+            yaxis_title='Growth %',
+            showlegend=False,
+            height=400
+        )
+        
+        st.plotly_chart(fig_mom, use_container_width=True)
+    else:
+        st.info("Need at least 2 months of data for MoM comparison")
 
 # ════════════════════════════════════════════════════════════
 # VIEW 3: DNA & LEAKAGE
