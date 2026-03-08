@@ -32,10 +32,13 @@ try:
     LICENSE_ENABLED = True
 except ImportError:
     LICENSE_ENABLED = False
-    st.warning("⚠️ License module not found - running in open mode")
 
-# ── Page config MUST be first Streamlit call ───────────────
+# ── Page config MUST be FIRST Streamlit call ───────────────
 st.set_page_config(page_title="Sales Intelligence Pro", page_icon="📊", layout="wide")
+
+# Show license warning if module not found (AFTER set_page_config)
+if not LICENSE_ENABLED:
+    st.warning("⚠️ License module not found - running in open mode")
 
 # Initialize session state for license persistence
 if 'license_checked' not in st.session_state:
@@ -90,7 +93,7 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 # Create a README in the folder to help customers
 README_PATH = DATA_DIR / "README.txt"
 if not README_PATH.exists():
-    with open(README_PATH, 'w') as f:
+    with open(README_PATH, 'w', encoding='utf-8') as f:
         f.write("""Sales Intelligence Pro - Saved Files
 ==========================================
 
@@ -216,7 +219,9 @@ def to_excel(df):
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False)
         return output.getvalue()
-    except: return None
+    except Exception as e:
+        st.error(f"Excel export failed: {e}")
+        return None
 
 def clean_kpi(title, metrics):
     st.markdown(f"### {title}")
@@ -263,7 +268,7 @@ def chi2_test(pair_count, total, item_a, item_b):
     try:
         _, p_val, _, _ = chi2_contingency([[both, only_a], [only_b, neither]])
         return p_val < 0.05, p_val
-    except:
+    except Exception:
         return False, 1.0
 
 def correlation_test(x, y):
@@ -304,7 +309,8 @@ def load_data(files):
                 
                 # Find the header row (look for row with "Date", "Amount", "Particulars", etc.)
                 header_row = 0
-                for idx, row in df_test.iterrows():
+                for idx in range(len(df_test)):
+                    row = df_test.iloc[idx]
                     # Convert row to lowercase string for checking
                     row_str = ' '.join([str(x).lower().strip() for x in row if pd.notna(x) and str(x).strip() != ''])
                     # Look for key column indicators
@@ -312,7 +318,7 @@ def load_data(files):
                         # Make sure it has multiple keywords (not just one)
                         keyword_count = sum(1 for word in ['date', 'vch', 'bill', 'particulars', 'amount', 'customer'] if word in row_str)
                         if keyword_count >= 2:  # Must have at least 2 keywords to be header
-                            header_row = int(idx)
+                            header_row = idx
                             break
                 
                 # Re-read with correct header
@@ -1350,14 +1356,14 @@ elif view == "Customer Deep Dive":
     with col1:
         st.markdown("#### 📈 Best Months")
         top_months = monthly_pattern.nlargest(3, 'sum')[['YearMonth', 'sum']]
-        for idx, row in top_months.iterrows():
-            st.caption(f"🟢 {row['YearMonth']}: ₹{row['sum']:,.0f}")
+        for month, amount in zip(top_months['YearMonth'], top_months['sum']):
+            st.caption(f"🟢 {month}: ₹{amount:,.0f}")
     
     with col2:
         st.markdown("#### 📉 Weakest Months")
         bottom_months = monthly_pattern.nsmallest(3, 'sum')[['YearMonth', 'sum']]
-        for idx, row in bottom_months.iterrows():
-            st.caption(f"🔴 {row['YearMonth']}: ₹{row['sum']:,.0f}")
+        for month, amount in zip(bottom_months['YearMonth'], bottom_months['sum']):
+            st.caption(f"🔴 {month}: ₹{amount:,.0f}")
     
     st.markdown("---")
     
@@ -1437,7 +1443,7 @@ elif view == "Growth Lab":
             st.markdown(f"### 📊 Top 20 {entity_name}s - Multi-Year Comparison")
             display_df = pivot.sort_values(years[-1], ascending=False).head(20)
             st.dataframe(
-                display_df.style.format('₹{:,.0f}').background_gradient(cmap='RdYlGn', subset=[col for col in display_df.columns if 'Change' in col or '%' in col]),
+                display_df.style.format('₹{:,.0f}'),
                 use_container_width=True
             )
     
@@ -1685,7 +1691,7 @@ elif view == "Growth Lab":
                         'Current (₹)': '₹{:,.0f}',
                         'Change (₹)': '₹{:+,.0f}',
                         'Growth %': '{:+.1f}%'
-                    }).background_gradient(subset=['Growth %'], cmap='Greens'),
+                    }),
                     use_container_width=True,
                     height=600
                 )
@@ -1701,7 +1707,7 @@ elif view == "Growth Lab":
                         'Current (₹)': '₹{:,.0f}',
                         'Change (₹)': '₹{:+,.0f}',
                         'Growth %': '{:+.1f}%'
-                    }).background_gradient(subset=['Growth %'], cmap='Reds_r'),
+                    }),
                     use_container_width=True,
                     height=600
                 )
@@ -1875,37 +1881,37 @@ elif view == "DNA & Leakage":
     st.caption(f"Showing {len(filtered_patterns)} customer(s)")
     
     # Display each customer in an expandable box
-    for idx, row in filtered_patterns.iterrows():
-        status_emoji = row['Status'].split()[0]  # Get emoji part
+    for row in filtered_patterns.itertuples(index=False):
+        status_emoji = row.Status.split()[0]  # Get emoji part
         
         # Create expander with customer info
         with st.expander(
-            f"{status_emoji} {row['Customer']} | Revenue: ₹{row['Total_Revenue']:,.0f} | Orders: {row['Order_Count']} | Last: {row['Days_Since_Last']:.0f} days ago"
+            f"{status_emoji} {row.Customer} | Revenue: ₹{row.Total_Revenue:,.0f} | Orders: {row.Order_Count} | Last: {row.Days_Since_Last:.0f} days ago"
         ):
             # Detailed customer info
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.markdown("**📊 Purchase Behavior**")
-                st.metric("Total Revenue", f"₹{row['Total_Revenue']:,.0f}")
-                st.metric("Total Orders", f"{row['Order_Count']}")
-                st.metric("Avg Order Value", f"₹{row['Total_Revenue']/row['Order_Count']:,.0f}")
+                st.metric("Total Revenue", f"₹{row.Total_Revenue:,.0f}")
+                st.metric("Total Orders", f"{row.Order_Count}")
+                st.metric("Avg Order Value", f"₹{row.Total_Revenue/row.Order_Count:,.0f}")
             
             with col2:
                 st.markdown("**⏰ Timing Pattern**")
-                st.metric("Days Since Last Purchase", f"{row['Days_Since_Last']:.0f} days")
-                st.metric("Avg Gap Between Orders", f"{row['Avg_Gap_Days']:.0f} days")
-                st.metric("Purchase Frequency", f"Every {row['Avg_Gap_Days']:.0f} days")
+                st.metric("Days Since Last Purchase", f"{row.Days_Since_Last:.0f} days")
+                st.metric("Avg Gap Between Orders", f"{row.Avg_Gap_Days:.0f} days")
+                st.metric("Purchase Frequency", f"Every {row.Avg_Gap_Days:.0f} days")
             
             with col3:
                 st.markdown("**🎯 Status & Risk**")
-                st.metric("Status", row['Status'])
+                st.metric("Status", row.Status)
                 
                 # Risk level
-                if row['Status'] == "🔴 LEAKAGE":
+                if row.Status == "🔴 LEAKAGE":
                     risk = "🔴 HIGH"
                     risk_color = "red"
-                elif row['Status'] == "🟡 WARNING":
+                elif row.Status == "🟡 WARNING":
                     risk = "🟡 MEDIUM"
                     risk_color = "orange"
                 else:
@@ -1915,9 +1921,9 @@ elif view == "DNA & Leakage":
                 st.markdown(f"**Risk Level:** :{risk_color}[{risk}]")
                 
                 # Recommended action
-                if row['Status'] == "🔴 LEAKAGE":
+                if row.Status == "🔴 LEAKAGE":
                     st.warning("⚠️ **Action:** Immediate outreach recommended")
-                elif row['Status'] == "🟡 WARNING":
+                elif row.Status == "🟡 WARNING":
                     st.info("📞 **Action:** Schedule follow-up call")
                 else:
                     st.success("✅ **Action:** Maintain regular contact")
@@ -1926,7 +1932,7 @@ elif view == "DNA & Leakage":
             st.markdown("---")
             st.markdown("**📜 Recent Transaction History**")
             
-            customer_transactions = df[df['Particulars'] == row['Customer']].copy()
+            customer_transactions = df[df['Particulars'] == row.Customer].copy()
             customer_transactions = customer_transactions.sort_values('Date', ascending=False).head(10)
             
             # Display transactions
@@ -1958,7 +1964,7 @@ elif view == "DNA & Leakage":
                 ))
                 
                 fig.update_layout(
-                    title=f'{row["Customer"]} - Purchase Pattern',
+                    title=f'{row.Customer} - Purchase Pattern',
                     xaxis_title='Month',
                     yaxis_title='Amount (₹)',
                     height=300,
@@ -2360,12 +2366,13 @@ elif view == "Market Basket":
         import networkx as nx
         
         G = nx.Graph()
-        for _, row in significant_basket.iterrows():
-            G.add_edge(
-                row['Product A'],
-                row['Product B'],
-                weight=row['Lift']
-            )
+        # Use zip to iterate over columns (much faster than iterrows)
+        for prod_a, prod_b, lift in zip(
+            significant_basket['Product A'],
+            significant_basket['Product B'],
+            significant_basket['Lift']
+        ):
+            G.add_edge(prod_a, prod_b, weight=lift)
         
         pos = nx.spring_layout(G, k=2, iterations=50)
         
