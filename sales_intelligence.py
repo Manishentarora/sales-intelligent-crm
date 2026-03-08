@@ -400,22 +400,21 @@ def load_data(files):
                 df['Particulars'] = df['Particulars'].ffill()
             
             # Remove completely blank rows
-            rows_before = len(df)
             df = df[df['Amount'].notna()].copy()
             
             # CRITICAL: Group by invoice to avoid double-counting line items
-            # Each invoice may have multiple products - we want total per invoice
-            invoice_totals = df.groupby(['Date', 'Vch/Bill No', 'Particulars']).agg({
-                'Amount': 'sum',  # Sum all line items in the invoice
-                'Item Details': 'first',  # Keep first product for reference
-                'Quantity': 'first',
-                'Category': 'first',
-                'Location': 'first',
-                'Payment Terms': 'first',
-                'Region': 'first',
-                'Discount %': 'first',
-                'Salesperson': 'first'
-            }).reset_index()
+            # Build aggregation dict dynamically based on available columns
+            agg_dict = {'Amount': 'sum'}  # Always sum amounts
+            
+            # Add other columns with 'first' aggregation if they exist
+            optional_cols = ['Item Details', 'Quantity', 'Category', 'Location', 
+                           'Payment Terms', 'Region', 'Discount %', 'Salesperson']
+            for col in optional_cols:
+                if col in df.columns:
+                    agg_dict[col] = 'first'
+            
+            # Group by invoice
+            invoice_totals = df.groupby(['Date', 'Vch/Bill No', 'Particulars']).agg(agg_dict).reset_index()
             
             st.sidebar.success(f"✅ Processed {len(df)} line items → {len(invoice_totals)} invoices")
             
