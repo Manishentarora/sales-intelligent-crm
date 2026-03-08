@@ -390,7 +390,34 @@ def load_data(files):
             # Handle missing columns
             df = handle_missing_columns(df)
             
-            # CRITICAL FIX: Handle multi-line invoices
+            # CRITICAL FIX 1: Remove grand total row (smart detection)
+            # The total row is at the bottom with blank Date/Invoice/Customer
+            # and Amount = sum of all other rows
+            # We remove it by checking: if a row has all blanks AND amount is > 50% of total sum = it's a total row
+            
+            rows_before_cleanup = len(df)
+            
+            # Calculate total of all amounts
+            total_sum = df['Amount'].sum()
+            
+            # Find rows where Date, Invoice, Customer are ALL blank
+            blank_rows = df[
+                df['Date'].isna() & 
+                df['Vch/Bill No'].isna() & 
+                df['Particulars'].isna() & 
+                df['Amount'].notna()
+            ]
+            
+            # Among blank rows, find any where Amount is suspiciously close to total sum (likely grand total)
+            # If amount is > 10% of total sum, it's likely a summary/total row, not a line item
+            summary_rows = blank_rows[blank_rows['Amount'] > (total_sum * 0.10)]
+            
+            if len(summary_rows) > 0:
+                # Remove these summary rows
+                df = df[~df.index.isin(summary_rows.index)].copy()
+                st.sidebar.warning(f"⚠️ Removed {len(summary_rows)} total/summary row(s)")
+            
+            # CRITICAL FIX 2: Handle multi-line invoices
             # Fill forward Date, Invoice No, and Customer for continuation rows
             if 'Date' in df.columns:
                 df['Date'] = df['Date'].ffill()
@@ -402,7 +429,7 @@ def load_data(files):
             # Remove completely blank rows
             df = df[df['Amount'].notna()].copy()
             
-            # CRITICAL: Group by invoice to avoid double-counting line items
+            # CRITICAL FIX 3: Group by invoice to avoid double-counting line items
             # Build aggregation dict dynamically based on available columns
             agg_dict = {'Amount': 'sum'}  # Always sum amounts
             
