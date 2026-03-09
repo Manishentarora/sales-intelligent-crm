@@ -223,6 +223,33 @@ def to_excel(df):
         st.error(f"Excel export failed: {e}")
         return None
 
+def add_download_buttons(view_name, data_df):
+    """Add data download buttons to any page"""
+    st.markdown("---")
+    st.markdown("### 📥 Download Data")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        csv_data = data_df.to_csv(index=False)
+        st.download_button(
+            "📄 Download CSV",
+            csv_data,
+            f"{view_name.replace(' ', '_').lower()}_data.csv",
+            "text/csv",
+            use_container_width=True
+        )
+    
+    with col2:
+        excel_data = to_excel(data_df)
+        if excel_data:
+            st.download_button(
+                "📊 Download Excel",
+                excel_data,
+                f"{view_name.replace(' ', '_').lower()}_data.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
 def clean_kpi(title, metrics):
     st.markdown(f"### {title}")
     cols = st.columns(min(len(metrics[:3]), 3))
@@ -482,6 +509,15 @@ def load_data(files):
     
     # Combine all files
     combined = pd.concat(all_dfs, ignore_index=True)
+    
+    # FIX #6: Verify critical columns exist after processing
+    required_cols = ['Date', 'Particulars', 'Amount']
+    missing_cols = [col for col in required_cols if col not in combined.columns]
+    
+    if missing_cols:
+        st.error(f"❌ Critical columns missing after processing: {missing_cols}")
+        st.info("Available columns: " + ", ".join(combined.columns))
+        st.stop()
     
     # Remove duplicates
     combined_unique, dup_count = remove_duplicates(combined)
@@ -1254,6 +1290,9 @@ if view == "Dashboard":
             xaxis={'tickangle': -45}  # Angle labels for readability
         )
         st.plotly_chart(fig3, use_container_width=True)
+    
+    # Download buttons
+    add_download_buttons("Dashboard", df)
 
 # ════════════════════════════════════════════════════════════
 # VIEW 2: GROWTH LAB
@@ -1392,6 +1431,9 @@ elif view == "Customer Deep Dive":
     with col2:
         days_since_last = (ref_date - customer_df['Date'].max()).days
         st.metric("Days Since Last Purchase", f"{days_since_last} days")
+    
+    # Download buttons
+    add_download_buttons("Customer Deep Dive", customer_df)
 
 # ════════════════════════════════════════════════════════════
 # VIEW 3: GROWTH LAB
@@ -1440,12 +1482,32 @@ elif view == "Growth Lab":
                     pivot[f'{years[i]}→{years[i+1]} Change'] = pivot[years[i+1]] - pivot[years[i]]
                     pivot[f'{years[i]}→{years[i+1]} %'] = (pivot[f'{years[i]}→{years[i+1]} Change'] / pivot[years[i]] * 100).replace([np.inf, -np.inf], 0)
             
-            st.markdown(f"### 📊 Top 20 {entity_name}s - Multi-Year Comparison")
-            display_df = pivot.sort_values(years[-1], ascending=False).head(20)
-            st.dataframe(
-                display_df.style.format('₹{:,.0f}'),
-                use_container_width=True
+            st.markdown(f"### 📊 All {entity_name}s - Multi-Year Comparison")
+            display_df = pivot.sort_values(years[-1], ascending=False)
+            
+            # Add pagination
+            page_size = 50
+            total_pages = max(1, (len(display_df) + page_size - 1) // page_size)
+            
+            page = st.number_input(
+                f"Page (Total: {len(display_df)} {entity_name.lower()}s)",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1,
+                key="growth_overview_page"
             )
+            
+            start_idx = (page - 1) * page_size
+            end_idx = min(start_idx + page_size, len(display_df))
+            
+            st.dataframe(
+                display_df.iloc[start_idx:end_idx].style.format('₹{:,.0f}'),
+                use_container_width=True,
+                height=600
+            )
+            
+            st.caption(f"Showing {start_idx+1}-{end_idx} of {len(display_df)} {entity_name.lower()}s")
     
     # ═══════════════════════════════════════════════════════════════
     # TAB 2: INDIVIDUAL CUSTOMER TRACKING
@@ -1729,6 +1791,30 @@ elif view == "Growth Lab":
         monthly_sales = monthly_sales.sort_values('YearMonth')
         
         if len(monthly_sales) >= 2:
+            # MONTH RANGE SELECTOR
+            st.markdown("#### 📅 Select Month Range")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                start_month = st.selectbox(
+                    "From:",
+                    options=monthly_sales['YearMonth'].tolist(),
+                    index=0,
+                    key="mom_start"
+                )
+            with col_b:
+                end_month = st.selectbox(
+                    "To:",
+                    options=monthly_sales['YearMonth'].tolist(),
+                    index=len(monthly_sales)-1,
+                    key="mom_end"
+                )
+            
+            # Filter to selected range
+            monthly_sales = monthly_sales[
+                (monthly_sales['YearMonth'] >= start_month) &
+                (monthly_sales['YearMonth'] <= end_month)
+            ].copy()
+            
             # Calculate MoM changes
             monthly_sales['Previous_Month'] = monthly_sales['Amount'].shift(1)
             monthly_sales['MoM_Change'] = monthly_sales['Amount'] - monthly_sales['Previous_Month']
@@ -1800,6 +1886,9 @@ elif view == "Growth Lab":
             st.plotly_chart(fig_mom, use_container_width=True)
         else:
             st.info("Need at least 2 months of data for MoM comparison")
+    
+    # Download buttons
+    add_download_buttons("Growth Lab", df)
 
 # ════════════════════════════════════════════════════════════
 # VIEW 3: DNA & LEAKAGE
@@ -2042,14 +2131,34 @@ elif view == "Lapse Tracker":
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("### 📋 Inactive Customers List")
+            st.markdown("### 📋 All Inactive Customers")
+            
+            # Pagination for ALL lapsed customers
+            page_size = 100
+            total_pages = max(1, (len(lapsed) + page_size - 1) // page_size)
+            
+            page = st.number_input(
+                f"Page (Total: {len(lapsed)} inactive customers)",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1,
+                key="lapse_page"
+            )
+            
+            start_idx = (page - 1) * page_size
+            end_idx = min(start_idx + page_size, len(lapsed))
+            
             st.dataframe(
-                lapsed[['Particulars', 'Days_Since_Purchase', 'Lifetime_Value', 'Total_Invoices', 'Priority']].head(30).style.format({
+                lapsed[['Particulars', 'Days_Since_Purchase', 'Lifetime_Value', 'Total_Invoices', 'Priority']].iloc[start_idx:end_idx].style.format({
                     'Days_Since_Purchase': '{:.0f} days',
                     'Lifetime_Value': '₹{:,.0f}'
                 }),
-                use_container_width=True
+                use_container_width=True,
+                height=600
             )
+            
+            st.caption(f"Showing {start_idx+1}-{end_idx} of {len(lapsed)} customers")
         
         with col2:
             st.markdown("### 🎯 Priority Distribution")
