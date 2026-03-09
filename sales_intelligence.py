@@ -341,7 +341,8 @@ def load_data(files):
                 file_bytes = io.BytesIO(content)
                 
                 # First, scan first 25 rows to find headers (read with NO header)
-                df_test = pd.read_excel(file_bytes, header=None, nrows=25)
+                # Explicitly specify engine to avoid auto-detection issues
+                df_test = pd.read_excel(file_bytes, header=None, nrows=25, engine='openpyxl')
                 
                 # Find the header row (look for row with "Date", "Amount", "Particulars", etc.)
                 header_row = 0
@@ -357,9 +358,9 @@ def load_data(files):
                             header_row = idx
                             break
                 
-                # Re-read with correct header
+                # Re-read with correct header and explicit engine
                 file_bytes.seek(0)
-                df = pd.read_excel(file_bytes, header=header_row)
+                df = pd.read_excel(file_bytes, header=header_row, engine='openpyxl')
                 
                 if header_row > 0:
                     st.sidebar.info(f"📋 Skipped {header_row} header row(s)")
