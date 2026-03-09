@@ -2314,7 +2314,7 @@ elif view == "ABC Analysis":
             'Revenue': '₹{:,.0f}',
             'Rev_%': '{:.2f}%',
             'Cum_%': '{:.2f}%'
-        }).background_gradient(subset=['Revenue'], cmap='Greens'),
+        }),
         use_container_width=True
     )
     
@@ -2396,7 +2396,7 @@ elif view == "RFM Segmentation":
         display_rfm[['Customer', 'Recency', 'Frequency', 'Monetary', 'R', 'F', 'M', 'RFM_Score', 'Segment']].head(100).style.format({
             'Recency': '{:.0f} days',
             'Monetary': '₹{:,.0f}'
-        }).background_gradient(subset=['RFM_Score'], cmap='RdYlGn'),
+        }),
         use_container_width=True
     )
     
@@ -2462,7 +2462,7 @@ elif view == "Market Basket":
             'Confidence%': '{:.2f}%',
             'Lift': '{:.2f}',
             'P_Value': '{:.4f}'
-        }).background_gradient(subset=['Lift'], cmap='RdYlGn'),
+        }),
         use_container_width=True
     )
     
@@ -2699,7 +2699,7 @@ elif view == "Concentration Risk":
             'Revenue': '₹{:,.0f}',
             'Share%': '{:.2f}%',
             'Cumulative%': '{:.2f}%'
-        }).background_gradient(subset=['Share%'], cmap='Reds'),
+        }),
         use_container_width=True
     )
 
@@ -2919,7 +2919,7 @@ elif view == "Salesperson Dashboard":
             'Revenue': '₹{:,.0f}',
             'Revenue%': '{:.1f}%',
             'Avg_Deal_Size': '₹{:,.0f}'
-        }).background_gradient(subset=['Revenue'], cmap='Greens'),
+        }),
         use_container_width=True
     )
     
@@ -3116,7 +3116,7 @@ elif view == "Territory Analysis":
             'Revenue': '₹{:,.0f}',
             'Penetration': '{:.2f}',
             'Revenue_per_Customer': '₹{:,.0f}'
-        }).background_gradient(subset=['Revenue'], cmap='Greens'),
+        }),
         use_container_width=True
     )
     
