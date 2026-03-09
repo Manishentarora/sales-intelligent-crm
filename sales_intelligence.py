@@ -66,6 +66,8 @@ st.markdown("""
 @media (min-width: 768px) and (max-width: 1024px) {
     .row-widget.stHorizontal > div { flex: 0 0 48% !important; }
 }
+
+/* Metric containers */
 [data-testid="metric-container"] {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -73,10 +75,44 @@ st.markdown("""
     border-radius: 1rem;
     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
 }
+
+/* Regular buttons */
 .stButton > button {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     font-weight: 600;
+}
+
+/* Navigation Pills Styling */
+[data-testid="stPills"] {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+[data-testid="stPills"] button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+    border: none !important;
+    padding: 0.75rem 1.5rem !important;
+    border-radius: 0.5rem !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3) !important;
+    margin: 0.25rem !important;
+}
+
+[data-testid="stPills"] button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5) !important;
+}
+
+[data-testid="stPills"] button[data-selected="true"],
+[data-testid="stPills"] button[aria-selected="true"] {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+    box-shadow: 0 6px 16px rgba(118, 75, 162, 0.6) !important;
+    transform: scale(1.05) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1486,13 +1522,33 @@ elif view == "Growth Lab":
             start_idx = (page - 1) * page_size
             end_idx = min(start_idx + page_size, len(display_df))
             
+            # Create styled dataframe with color coding
+            def color_growth(val):
+                """Color code: Green for positive, Red for negative"""
+                if pd.isna(val) or val == 0:
+                    return ''
+                color = 'green' if val > 0 else 'red'
+                return f'color: {color}; font-weight: bold'
+            
+            # Apply styling to Change and % columns
+            styled_df = display_df.iloc[start_idx:end_idx].style.format('₹{:,.0f}')
+            
+            # Find Change and % columns
+            change_cols = [col for col in display_df.columns if 'Change' in col or '%' in col]
+            
+            for col in change_cols:
+                if col in display_df.columns:
+                    if '%' in col:
+                        styled_df = styled_df.format({col: '{:+.1f}%'})
+                    styled_df = styled_df.applymap(color_growth, subset=[col])
+            
             st.dataframe(
-                display_df.iloc[start_idx:end_idx].style.format('₹{:,.0f}'),
+                styled_df,
                 use_container_width=True,
                 height=600
             )
             
-            st.caption(f"Showing {start_idx+1}-{end_idx} of {len(display_df)} {entity_name.lower()}s")
+            st.caption(f"Showing {start_idx+1}-{end_idx} of {len(display_df)} {entity_name.lower()}s | 🟢 Growth 🔴 Decline")
     
     # ═══════════════════════════════════════════════════════════════
     # TAB 2: INDIVIDUAL CUSTOMER TRACKING
