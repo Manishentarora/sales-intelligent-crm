@@ -974,17 +974,21 @@ if saved_files:
     with st.sidebar.expander("🗑️ Manage Saved Files", expanded=False):
         st.caption("**Select files to delete:**")
         
+        # Select All checkbox
+        select_all = st.checkbox("✅ Select All", key="select_all_files")
+        
         # Create checkboxes for each file
         files_to_delete = []
-        select_all = st.checkbox("Select All", key="select_all_files")
         
         for f in saved_files:
-            if select_all:
-                if st.checkbox(f.name, value=True, key=f"del_{f.name}"):
-                    files_to_delete.append(f)
-            else:
-                if st.checkbox(f.name, value=False, key=f"del_{f.name}"):
-                    files_to_delete.append(f)
+            # When select_all is checked, default to True, otherwise False
+            checkbox_value = st.checkbox(
+                f.name, 
+                value=select_all,  # This sets the default based on select_all
+                key=f"del_{f.name}"
+            )
+            if checkbox_value:
+                files_to_delete.append(f)
         
         if files_to_delete:
             col1, col2 = st.columns(2)
@@ -1004,29 +1008,52 @@ if saved_files:
                 if st.button("❌ Cancel", use_container_width=True):
                     st.rerun()
     
-    # Create dropdown with saved files + upload option
-    file_choices = ["📤 Upload new file..."] + [f.name for f in saved_files]
-    selection = st.sidebar.selectbox(
-        "📁 Select Data Source:",
-        file_choices,
-        index=0,
-        help="Choose a previously saved file or upload new"
-    )
+    # File selection interface
+    st.sidebar.markdown("### 📁 Select Data Files")
     
-    if selection == "📤 Upload new file...":
-        # Show file uploader
-        uploaded_files = st.sidebar.file_uploader(
-            "Upload Excel/CSV",
-            type=['xlsx', 'xls', 'csv'],
-            accept_multiple_files=True
+    # Option 1: Select saved files (multiselect)
+    if saved_files:
+        st.sidebar.markdown("**Saved Files:**")
+        selected_saved_files = st.sidebar.multiselect(
+            "Choose saved file(s):",
+            [f.name for f in saved_files],
+            default=None,
+            help="Select one or more saved files to analyze together"
         )
     else:
-        # Load from saved file
-        selected_path = [f for f in saved_files if f.name == selection][0]
-        with open(selected_path, 'rb') as f:
-            file_content = f.read()
-        uploaded_files = [(selection, file_content)]
-        st.sidebar.info(f"📂 Loaded: {selection}")
+        selected_saved_files = []
+    
+    # Option 2: Upload new files
+    st.sidebar.markdown("**Or Upload New:**")
+    newly_uploaded = st.sidebar.file_uploader(
+        "Upload Excel/CSV",
+        type=['xlsx', 'xls', 'csv'],
+        accept_multiple_files=True,
+        help="Upload one or more files (will be auto-saved)"
+    )
+    
+    # Combine selected saved files + newly uploaded files
+    uploaded_files = []
+    
+    # Load selected saved files
+    if selected_saved_files:
+        for fname in selected_saved_files:
+            selected_path = [f for f in saved_files if f.name == fname][0]
+            with open(selected_path, 'rb') as f:
+                file_content = f.read()
+            # Create a file-like object
+            from io import BytesIO
+            uploaded_files.append(type('obj', (object,), {
+                'name': fname,
+                'read': lambda content=file_content: content,
+                'getvalue': lambda content=file_content: content
+            })())
+        st.sidebar.success(f"✅ Selected {len(selected_saved_files)} saved file(s)")
+    
+    # Add newly uploaded files
+    if newly_uploaded:
+        uploaded_files.extend(newly_uploaded)
+        st.sidebar.info(f"📤 Uploaded {len(newly_uploaded)} new file(s)")
 
 else:
     # No saved files - first time user
