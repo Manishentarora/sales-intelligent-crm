@@ -43,11 +43,14 @@ if not LICENSE_ENABLED:
 # Initialize session state for license persistence
 if 'license_checked' not in st.session_state:
     st.session_state.license_checked = False
+if 'license_valid' not in st.session_state:
+    st.session_state.license_valid = False
 
 # ── License enforcement — app stops here if invalid ────────
-if LICENSE_ENABLED and not st.session_state.license_checked:
+if LICENSE_ENABLED and not st.session_state.license_valid:
     if show_license_screen():
         st.session_state.license_checked = True
+        st.session_state.license_valid = True
         st.rerun()
     else:
         st.stop()
@@ -122,7 +125,13 @@ def save_uploaded_file(uploaded_file):
     """Save uploaded file permanently"""
     file_path = UPLOADS_DIR / uploaded_file.name
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+        # Handle both Streamlit UploadedFile and BytesIO objects
+        if hasattr(uploaded_file, 'getbuffer'):
+            f.write(uploaded_file.getbuffer())
+        else:
+            # BytesIO or similar - use getvalue()
+            uploaded_file.seek(0)
+            f.write(uploaded_file.getvalue())
     return file_path
 
 def get_saved_files():
@@ -889,147 +898,65 @@ def territory_analysis(df):
 
 st.sidebar.title("📊 Sales Intelligence Pro")
 
-# Show license info if active
+# Show license info if active (collapsed by default)
 if LICENSE_ENABLED and st.session_state.get('license_valid'):
-    with st.sidebar.expander("🔑 License Info", expanded=False):
-        st.caption(f"**Status:** ✅ Active")
-        if 'license_message' in st.session_state:
-            st.caption(f"**Plan:** {st.session_state.license_message}")
-        if 'license_key' in st.session_state:
-            key_display = st.session_state.license_key[:20] + "..."
-            st.caption(f"**Key:** {key_display}")
-        st.caption("")
-        if st.button("🔓 Change License"):
+    with st.sidebar.expander("🔑 License", expanded=False):
+        st.caption("✅ Active")
+        if st.button("Change License", key="change_lic"):
             st.session_state.license_valid = False
             st.rerun()
-
-# Data storage information
-with st.sidebar.expander("💾 Your Saved Files", expanded=False):
-    st.caption("**Files saved at:**")
-    st.code(f"Documents/SalesIntelligence/SavedFiles")
-    st.caption(f"Full path: {str(UPLOADS_DIR)}")
-    st.caption("")
-    st.caption("✅ Easy to find in Documents folder")
-    st.caption("✅ Saved on YOUR computer")
-    st.caption("❌ Never uploaded to cloud")
-    st.caption("🔒 100% private and secure")
-    
-    # Open folder button
-    if st.button("📁 Open Saved Files Folder"):
-        import subprocess
-        import platform
-        system = platform.system()
-        try:
-            if system == "Windows":
-                os.startfile(UPLOADS_DIR)
-            elif system == "Darwin":  # macOS
-                subprocess.run(["open", str(UPLOADS_DIR)])
-            else:  # Linux
-                subprocess.run(["xdg-open", str(UPLOADS_DIR)])
-            st.success("✅ Folder opened!")
-        except Exception as e:
-            st.info(f"📂 Manually navigate to: {UPLOADS_DIR}")
-    
-    # Backup functionality
-    if st.button("📥 Backup All Data"):
-        backup_file = DATA_DIR / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-        try:
-            shutil.make_archive(
-                str(backup_file).replace('.zip', ''),
-                'zip',
-                UPLOADS_DIR
-            )
-            st.success(f"✅ Backup created: {backup_file.name}")
-        except Exception as e:
-            st.error(f"Backup failed: {e}")
 
 st.sidebar.markdown("---")
 
 # ═══════════════════════════════════════════════════════════
-#  WORKING SAVED FILE UI - ACTUALLY IMPLEMENTED NOW
+#  SAVED FILE UI
 # ═══════════════════════════════════════════════════════════
 
 saved_files = get_saved_files()
 
 if saved_files:
-    st.sidebar.success(f"✅ {len(saved_files)} file(s) saved")
+    st.sidebar.success(f"💾 {len(saved_files)} saved file(s)")
     
-    # Show folder location button
-    if st.sidebar.button("📁 Open Saved Files Folder", use_container_width=True):
-        import subprocess
-        import platform
-        system = platform.system()
-        try:
-            if system == "Windows":
-                os.startfile(UPLOADS_DIR)
-            elif system == "Darwin":  # macOS
-                subprocess.run(["open", str(UPLOADS_DIR)])
-            else:  # Linux
-                subprocess.run(["xdg-open", str(UPLOADS_DIR)])
-            st.sidebar.success(f"✅ Opening: {UPLOADS_DIR}")
-        except Exception as e:
-            st.sidebar.info(f"📂 Folder: {UPLOADS_DIR}")
-    
-    # File management section
-    with st.sidebar.expander("🗑️ Manage Saved Files", expanded=False):
-        st.caption("**Select files to delete:**")
-        
-        # Select All checkbox
+    # Delete files (collapsed)
+    with st.sidebar.expander("🗑️ Delete Files", expanded=False):
         select_all = st.checkbox("✅ Select All", key="select_all_files")
         
-        # Create checkboxes for each file
         files_to_delete = []
-        
         for f in saved_files:
-            # When select_all is checked, default to True, otherwise False
-            checkbox_value = st.checkbox(
-                f.name, 
-                value=select_all,  # This sets the default based on select_all
-                key=f"del_{f.name}"
-            )
+            checkbox_value = st.checkbox(f.name, value=select_all, key=f"del_{f.name}")
             if checkbox_value:
                 files_to_delete.append(f)
         
         if files_to_delete:
             col1, col2 = st.columns(2)
             with col1:
-                if st.button(f"🗑️ Delete ({len(files_to_delete)})", type="primary", use_container_width=True):
+                if st.button(f"Delete ({len(files_to_delete)})", type="primary", use_container_width=True):
                     for f in files_to_delete:
                         try:
                             f.unlink()
-                        except Exception as e:
-                            st.error(f"Error deleting {f.name}: {e}")
-                    # Clear session state to force reload
+                        except Exception:
+                            pass
                     st.session_state.df = None
                     st.session_state.ref_date = None
-                    st.success(f"✅ Deleted {len(files_to_delete)} file(s)")
                     st.rerun()
             with col2:
-                if st.button("❌ Cancel", use_container_width=True):
+                if st.button("Cancel", use_container_width=True):
                     st.rerun()
     
-    # File selection interface
-    st.sidebar.markdown("### 📁 Select Data Files")
+    st.sidebar.markdown("---")
     
-    # Option 1: Select saved files (multiselect)
-    if saved_files:
-        st.sidebar.markdown("**Saved Files:**")
-        selected_saved_files = st.sidebar.multiselect(
-            "Choose saved file(s):",
-            [f.name for f in saved_files],
-            default=None,
-            help="Select one or more saved files to analyze together"
-        )
-    else:
-        selected_saved_files = []
+    # File selection
+    selected_saved_files = st.sidebar.multiselect(
+        "📁 Select Saved Files:",
+        [f.name for f in saved_files],
+        default=None,
+        help="Choose one or more files to analyze"
+    )
     
-    # Option 2: Upload new files
-    st.sidebar.markdown("**Or Upload New:**")
     newly_uploaded = st.sidebar.file_uploader(
-        "Upload Excel/CSV",
+        "📤 Upload New Files:",
         type=['xlsx', 'xls', 'csv'],
-        accept_multiple_files=True,
-        help="Upload one or more files (will be auto-saved)"
+        accept_multiple_files=True
     )
     
     # Combine selected saved files + newly uploaded files
@@ -1037,17 +964,17 @@ if saved_files:
     
     # Load selected saved files
     if selected_saved_files:
+        from io import BytesIO
         for fname in selected_saved_files:
             selected_path = [f for f in saved_files if f.name == fname][0]
             with open(selected_path, 'rb') as f:
                 file_content = f.read()
-            # Create a file-like object
-            from io import BytesIO
-            uploaded_files.append(type('obj', (object,), {
-                'name': fname,
-                'read': lambda content=file_content: content,
-                'getvalue': lambda content=file_content: content
-            })())
+            
+            # Create proper BytesIO object with name attribute
+            file_obj = BytesIO(file_content)
+            file_obj.name = fname
+            uploaded_files.append(file_obj)
+        
         st.sidebar.success(f"✅ Selected {len(selected_saved_files)} saved file(s)")
     
     # Add newly uploaded files
@@ -1057,13 +984,31 @@ if saved_files:
 
 else:
     # No saved files - first time user
-    st.sidebar.info("📤 Upload your first file")
-    uploaded_files = st.sidebar.file_uploader(
-        "Upload Excel/CSV",
+    selected_saved_files = []
+    newly_uploaded = st.sidebar.file_uploader(
+        "📤 Upload Excel/CSV:",
         type=['xlsx', 'xls', 'csv'],
-        accept_multiple_files=True,
-        help="Files will be saved for quick access later"
+        accept_multiple_files=True
     )
+
+# Combine selected saved files + newly uploaded files
+uploaded_files = []
+
+# Load selected saved files
+if selected_saved_files:
+    from io import BytesIO
+    for fname in selected_saved_files:
+        selected_path = [f for f in saved_files if f.name == fname][0]
+        with open(selected_path, 'rb') as f:
+            file_content = f.read()
+        
+        file_obj = BytesIO(file_content)
+        file_obj.name = fname
+        uploaded_files.append(file_obj)
+
+# Add newly uploaded files
+if newly_uploaded:
+    uploaded_files.extend(newly_uploaded)
 
 # Main data loading
 if 'df' not in st.session_state:
@@ -1097,27 +1042,32 @@ if not uploaded_files and df is None:
 # Handle file loading
 if uploaded_files:
     try:
-        # Save new uploads and load data
-        if isinstance(uploaded_files, list) and len(uploaded_files) > 0:
-            # From uploader - need to save and read
-            if isinstance(uploaded_files[0], tuple):
-                # Already processed (from saved file)
-                files_to_load = uploaded_files
-            else:
-                # Fresh uploads - save them first
-                files_to_load = []
-                for uploaded_file in uploaded_files:
-                    save_uploaded_file(uploaded_file)
-                    st.sidebar.success(f"💾 Saved: {uploaded_file.name}")
-                    uploaded_file.seek(0)
-                    files_to_load.append((uploaded_file.name, uploaded_file.read()))
-            
-            df = load_data(files_to_load)
-            ref_date = df['Date'].max()
-            
-            # Save to session state
-            st.session_state.df = df
-            st.session_state.ref_date = ref_date
+        # Convert all files to (name, content) tuples for load_data
+        files_to_load = []
+        
+        for file_obj in uploaded_files:
+            # Check if it's a BytesIO object (from saved files)
+            if hasattr(file_obj, 'seek'):
+                file_obj.seek(0)  # Reset to beginning
+                content = file_obj.read()
+                name = file_obj.name
+                
+                # Save newly uploaded files (not already saved ones)
+                # BytesIO objects from saved files won't need re-saving
+                if not any(f.name == name for f in saved_files):
+                    # This is a newly uploaded file - save it
+                    file_obj.seek(0)
+                    save_uploaded_file(file_obj)
+                    st.sidebar.success(f"💾 Saved: {name}")
+                
+                files_to_load.append((name, content))
+        
+        df = load_data(files_to_load)
+        ref_date = df['Date'].max()
+        
+        # Save to session state
+        st.session_state.df = df
+        st.session_state.ref_date = ref_date
         
         # Show data summary in sidebar
         st.sidebar.success(f"✅ {len(df):,} unique transactions")
@@ -1174,11 +1124,14 @@ elif df is not None:
     st.sidebar.caption(f"📅 {df['Date'].min().strftime('%b %Y')} – {df['Date'].max().strftime('%b %Y')}")
 
 # ════════════════════════════════════════════════════════════
-# NAVIGATION
+# NAVIGATION - TOP OF PAGE
 # ════════════════════════════════════════════════════════════
 
-view = st.sidebar.radio(
-    "📍 Navigate to View",
+st.markdown("## 📊 Sales Intelligence Pro")
+
+# Main navigation pills at the top
+view = st.pills(
+    "Navigate:",
     [
         "Dashboard",
         "Customer Deep Dive",
@@ -1194,8 +1147,12 @@ view = st.sidebar.radio(
         "Salesperson Dashboard",
         "Rep Comparison",
         "Territory Analysis"
-    ]
+    ],
+    selection_mode="single",
+    default="Dashboard"
 )
+
+st.markdown("---")
 
 
 # ════════════════════════════════════════════════════════════
