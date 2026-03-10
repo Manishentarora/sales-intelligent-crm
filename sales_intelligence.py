@@ -83,36 +83,50 @@ st.markdown("""
     font-weight: 600;
 }
 
-/* Navigation Pills Styling */
-[data-testid="stPills"] {
+/* Navigation Container */
+.nav-container {
     background: #f8f9fa;
     padding: 1rem;
     border-radius: 1rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
 }
 
-[data-testid="stPills"] button {
+/* Horizontal Radio Buttons - Navigation Styling */
+div[role="radiogroup"][class*="horizontal"] {
+    gap: 0.5rem !important;
+    padding: 0.5rem;
+    background: transparent;
+}
+
+div[role="radiogroup"][class*="horizontal"] label {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
     color: white !important;
     border: none !important;
-    padding: 0.75rem 1.5rem !important;
+    padding: 0.75rem 1.25rem !important;
     border-radius: 0.5rem !important;
     font-weight: 600 !important;
     transition: all 0.3s ease !important;
     box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3) !important;
+    cursor: pointer !important;
     margin: 0.25rem !important;
 }
 
-[data-testid="stPills"] button:hover {
+div[role="radiogroup"][class*="horizontal"] label:hover {
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5) !important;
 }
 
-[data-testid="stPills"] button[data-selected="true"],
-[data-testid="stPills"] button[aria-selected="true"] {
+div[role="radiogroup"][class*="horizontal"] label[data-checked="true"],
+div[role="radiogroup"][class*="horizontal"] input:checked + div {
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
     box-shadow: 0 6px 16px rgba(118, 75, 162, 0.6) !important;
     transform: scale(1.05) !important;
+}
+
+/* Hide the radio input circles */
+div[role="radiogroup"][class*="horizontal"] input[type="radio"] {
+    display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1166,8 +1180,10 @@ elif df is not None:
 
 st.markdown("## 📊 Sales Intelligence Pro")
 
-# Main navigation pills at the top
-view = st.pills(
+# Main navigation using radio buttons with custom styling
+st.markdown('<div class="nav-container">', unsafe_allow_html=True)
+
+view = st.radio(
     "Navigate:",
     [
         "Dashboard",
@@ -1185,10 +1201,11 @@ view = st.pills(
         "Rep Comparison",
         "Territory Analysis"
     ],
-    selection_mode="single",
-    default="Dashboard"
+    horizontal=True,
+    label_visibility="collapsed"
 )
 
+st.markdown('</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 
@@ -1522,35 +1539,34 @@ elif view == "Growth Lab":
             start_idx = (page - 1) * page_size
             end_idx = min(start_idx + page_size, len(display_df))
             
-            # Create styled dataframe with color coding
-            def color_growth(val):
-                """Color code: Green for positive, Red for negative"""
-                if pd.isna(val) or val == 0:
-                    return ''
-                color = 'green' if val > 0 else 'red'
-                return f'color: {color}; font-weight: bold'
-            
             # Prepare display data
             page_data = display_df.iloc[start_idx:end_idx].copy()
             
-            # Apply styling
-            styled_df = page_data.style
+            # Instead of complex styling, add visual indicators directly to the data
+            display_formatted = page_data.copy()
             
-            # Format all columns as currency first
-            styled_df = styled_df.format('₹{:,.0f}')
+            # Format year columns as currency
+            for year in years:
+                if year in display_formatted.columns:
+                    display_formatted[year] = display_formatted[year].apply(lambda x: f'₹{x:,.0f}')
             
-            # Find Change and % columns and apply color + special formatting
+            # Format Change and % columns with color indicators
             change_cols = [col for col in page_data.columns if 'Change' in col or '%' in col]
             
             for col in change_cols:
                 if '%' in col:
-                    # Format percentage columns with + sign
-                    styled_df = styled_df.format({col: '{:+.1f}%'})
-                # Apply color styling using map (not applymap)
-                styled_df = styled_df.map(color_growth, subset=[col])
+                    # Add emoji indicators to percentage
+                    display_formatted[col] = page_data[col].apply(
+                        lambda x: f"🟢 +{x:.1f}%" if x > 0 else (f"🔴 {x:.1f}%" if x < 0 else f"{x:.1f}%")
+                    )
+                else:
+                    # Add emoji indicators to change amount
+                    display_formatted[col] = page_data[col].apply(
+                        lambda x: f"🟢 ₹{x:+,.0f}" if x > 0 else (f"🔴 ₹{x:,.0f}" if x < 0 else f"₹{x:,.0f}")
+                    )
             
             st.dataframe(
-                styled_df,
+                display_formatted,
                 use_container_width=True,
                 height=600
             )
