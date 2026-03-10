@@ -1530,17 +1530,24 @@ elif view == "Growth Lab":
                 color = 'green' if val > 0 else 'red'
                 return f'color: {color}; font-weight: bold'
             
-            # Apply styling to Change and % columns
-            styled_df = display_df.iloc[start_idx:end_idx].style.format('₹{:,.0f}')
+            # Prepare display data
+            page_data = display_df.iloc[start_idx:end_idx].copy()
             
-            # Find Change and % columns
-            change_cols = [col for col in display_df.columns if 'Change' in col or '%' in col]
+            # Apply styling
+            styled_df = page_data.style
+            
+            # Format all columns as currency first
+            styled_df = styled_df.format('₹{:,.0f}')
+            
+            # Find Change and % columns and apply color + special formatting
+            change_cols = [col for col in page_data.columns if 'Change' in col or '%' in col]
             
             for col in change_cols:
-                if col in display_df.columns:
-                    if '%' in col:
-                        styled_df = styled_df.format({col: '{:+.1f}%'})
-                    styled_df = styled_df.applymap(color_growth, subset=[col])
+                if '%' in col:
+                    # Format percentage columns with + sign
+                    styled_df = styled_df.format({col: '{:+.1f}%'})
+                # Apply color styling using map (not applymap)
+                styled_df = styled_df.map(color_growth, subset=[col])
             
             st.dataframe(
                 styled_df,
