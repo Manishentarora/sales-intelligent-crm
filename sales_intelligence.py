@@ -76,57 +76,37 @@ st.markdown("""
     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
 }
 
-/* Regular buttons */
-.stButton > button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    font-weight: 600;
+/* Primary buttons (selected navigation) */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+    color: white !important;
+    font-weight: 700 !important;
+    border: 2px solid #764ba2 !important;
+    box-shadow: 0 4px 12px rgba(118, 75, 162, 0.5) !important;
+    transform: scale(1.02);
 }
 
-/* Navigation Container */
-.nav-container {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 1rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    margin-bottom: 1rem;
-}
-
-/* Horizontal Radio Buttons - Navigation Styling */
-div[role="radiogroup"][class*="horizontal"] {
-    gap: 0.5rem !important;
-    padding: 0.5rem;
-    background: transparent;
-}
-
-div[role="radiogroup"][class*="horizontal"] label {
+/* Secondary buttons (unselected navigation) */
+.stButton > button[kind="secondary"] {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
     color: white !important;
-    border: none !important;
-    padding: 0.75rem 1.25rem !important;
-    border-radius: 0.5rem !important;
     font-weight: 600 !important;
-    transition: all 0.3s ease !important;
+    border: none !important;
     box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3) !important;
-    cursor: pointer !important;
-    margin: 0.25rem !important;
 }
 
-div[role="radiogroup"][class*="horizontal"] label:hover {
+/* All navigation buttons */
+.stButton > button {
+    transition: all 0.2s ease !important;
+    border-radius: 0.5rem !important;
+    padding: 0.6rem 0.8rem !important;
+    font-size: 0.9rem !important;
+}
+
+/* Hover effect for all buttons */
+.stButton > button:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5) !important;
-}
-
-div[role="radiogroup"][class*="horizontal"] label[data-checked="true"],
-div[role="radiogroup"][class*="horizontal"] input:checked + div {
-    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
-    box-shadow: 0 6px 16px rgba(118, 75, 162, 0.6) !important;
-    transform: scale(1.05) !important;
-}
-
-/* Hide the radio input circles */
-div[role="radiogroup"][class*="horizontal"] input[type="radio"] {
-    display: none !important;
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1175,45 +1155,97 @@ elif df is not None:
     st.sidebar.caption(f"📅 {df['Date'].min().strftime('%b %Y')} – {df['Date'].max().strftime('%b %Y')}")
 
 # ════════════════════════════════════════════════════════════
-# NAVIGATION - TOP OF PAGE
+# NAVIGATION - TOP OF PAGE  
 # ════════════════════════════════════════════════════════════
 
 st.markdown("## 📊 Sales Intelligence Pro")
 
-# Main navigation using radio buttons with custom styling
-st.markdown('<div class="nav-container">', unsafe_allow_html=True)
+# Navigation using columns for button-like layout
+col1, col2, col3, col4, col5 = st.columns(5)
+col6, col7, col8, col9, col10 = st.columns(5)
+col11, col12, col13, col14, _ = st.columns(5)
 
-view = st.radio(
-    "Navigate:",
-    [
-        "Dashboard",
-        "Customer Deep Dive",
-        "Growth Lab",
-        "DNA & Leakage", 
-        "Lapse Tracker",
-        "ABC Analysis",
-        "RFM Segmentation",
-        "Market Basket",
-        "Cohort Analysis",
-        "Concentration Risk",
-        "Price Variance",
-        "Salesperson Dashboard",
-        "Rep Comparison",
-        "Territory Analysis"
-    ],
-    horizontal=True,
-    label_visibility="collapsed"
-)
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = "Dashboard"
 
-st.markdown('</div>', unsafe_allow_html=True)
+with col1:
+    if st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.current_view == "Dashboard" else "secondary"):
+        st.session_state.current_view = "Dashboard"
+        st.rerun()
+
+with col2:
+    if st.button("🔍 Deep Dive", use_container_width=True, type="primary" if st.session_state.current_view == "Customer Deep Dive" else "secondary"):
+        st.session_state.current_view = "Customer Deep Dive"
+        st.rerun()
+
+with col3:
+    if st.button("📈 Growth", use_container_width=True, type="primary" if st.session_state.current_view == "Growth Lab" else "secondary"):
+        st.session_state.current_view = "Growth Lab"
+        st.rerun()
+
+with col4:
+    if st.button("🧬 DNA", use_container_width=True, type="primary" if st.session_state.current_view == "DNA & Leakage" else "secondary"):
+        st.session_state.current_view = "DNA & Leakage"
+        st.rerun()
+
+with col5:
+    if st.button("⏱️ Lapse", use_container_width=True, type="primary" if st.session_state.current_view == "Lapse Tracker" else "secondary"):
+        st.session_state.current_view = "Lapse Tracker"
+        st.rerun()
+
+with col6:
+    if st.button("🎯 ABC", use_container_width=True, type="primary" if st.session_state.current_view == "ABC Analysis" else "secondary"):
+        st.session_state.current_view = "ABC Analysis"
+        st.rerun()
+
+with col7:
+    if st.button("💎 RFM", use_container_width=True, type="primary" if st.session_state.current_view == "RFM Segmentation" else "secondary"):
+        st.session_state.current_view = "RFM Segmentation"
+        st.rerun()
+
+with col8:
+    if st.button("🛒 Basket", use_container_width=True, type="primary" if st.session_state.current_view == "Market Basket" else "secondary"):
+        st.session_state.current_view = "Market Basket"
+        st.rerun()
+
+with col9:
+    if st.button("📅 Cohort", use_container_width=True, type="primary" if st.session_state.current_view == "Cohort Analysis" else "secondary"):
+        st.session_state.current_view = "Cohort Analysis"
+        st.rerun()
+
+with col10:
+    if st.button("⚠️ Risk", use_container_width=True, type="primary" if st.session_state.current_view == "Concentration Risk" else "secondary"):
+        st.session_state.current_view = "Concentration Risk"
+        st.rerun()
+
+with col11:
+    if st.button("💰 Price", use_container_width=True, type="primary" if st.session_state.current_view == "Price Variance" else "secondary"):
+        st.session_state.current_view = "Price Variance"
+        st.rerun()
+
+with col12:
+    if st.button("👤 Sales", use_container_width=True, type="primary" if st.session_state.current_view == "Salesperson Dashboard" else "secondary"):
+        st.session_state.current_view = "Salesperson Dashboard"
+        st.rerun()
+
+with col13:
+    if st.button("🏆 Compare", use_container_width=True, type="primary" if st.session_state.current_view == "Rep Comparison" else "secondary"):
+        st.session_state.current_view = "Rep Comparison"
+        st.rerun()
+
+with col14:
+    if st.button("🗺️ Territory", use_container_width=True, type="primary" if st.session_state.current_view == "Territory Analysis" else "secondary"):
+        st.session_state.current_view = "Territory Analysis"
+        st.rerun()
+
+view = st.session_state.current_view
+
 st.markdown("---")
 
 
 # ════════════════════════════════════════════════════════════
 # VIEW 1: DASHBOARD
-# ════════════════════════════════════════════════════════════
-
-if view == "Dashboard":
+# ════════════════════════════════════════════════════════════if view == "Dashboard":
     st.title("📊 Dashboard")
     
     # KPIs
